@@ -1,0 +1,61 @@
+{
+  "default_region": "puerto_rico",
+
+  "regions": {
+    "puerto_rico": {
+      "name": "Puerto Rico and Surrounding Region",
+      "description": "Puerto Rico, the Virgin Islands, Mona Passage, Puerto Rico Trench, and surrounding Caribbean seismic zones.",
+      "bounds": {
+        "min_latitude": 17.0,
+        "max_latitude": 20.0,
+        "min_longitude": -69.0,
+        "max_longitude": -63.5
+      },
+      "default_minimum_magnitude": 1.0,
+      "timezone": "America/Puerto_Rico",
+      "enabled": true
+    },
+
+    "california": {
+      "name": "California",
+      "description": "California and nearby seismic regions.",
+      "bounds": {
+        "min_latitude": 32.0,
+        "max_latitude": 42.5,
+        "min_longitude": -125.0,
+        "max_longitude": -114.0
+      },
+      "default_minimum_magnitude": 1.5,
+      "timezone": "America/Los_Angeles",
+      "enabled": false
+    },
+
+    "japan": {
+      "name": "Japan",
+      "description": "Japan and nearby offshore seismic regions.",
+      "bounds": {
+        "min_latitude": 24.0,
+        "max_latitude": 46.0,
+        "min_longitude": 122.0,
+        "max_longitude": 150.0
+      },
+      "default_minimum_magnitude": 2.5,
+      "timezone": "Asia/Tokyo",
+      "enabled": false
+    },
+
+    "chile": {
+      "name": "Chile",
+      "description": "Chile and nearby subduction-zone seismic regions.",
+      "bounds": {
+        "min_latitude": -56.0,
+        "max_latitude": -17.0,
+        "min_longitude": -76.0,
+        "max_longitude": -66.0
+      },
+      "default_minimum_magnitude": 2.5,
+      "timezone": "America/Santiago",
+      "enabled": false
+    }
+  }
+}
