@@ -27,3 +27,5 @@ outputs/forecasts/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !outputs/forecasts/.gitkeep
+outputs/reports/*
+!outputs/reports/.gitkeep
