@@ -29,3 +29,5 @@ outputs/forecasts/*
 !outputs/forecasts/.gitkeep
 outputs/reports/*
 !outputs/reports/.gitkeep
+.coverage
+htmlcov/
