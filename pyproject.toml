@@ -1,0 +1,54 @@
+[project]
+name = "project-athena"
+version = "0.4.0"
+description = "Experimental seismic intelligence and observatory platform."
+readme = "README.md"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+]
+filterwarnings = [
+    "error",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+omit = [
+    "src/__main__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+precision = 1
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+extend-exclude = [
+    ".venv",
+    "data",
+    "notebooks",
+    "outputs",
+]
+
+[tool.ruff.lint]
+# Start with high-confidence correctness rules so CI can be introduced
+# without forcing a large unrelated formatting refactor.
+select = [
+    "E9",
+    "F63",
+    "F7",
+    "F82",
+]

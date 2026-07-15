@@ -31,3 +31,12 @@ outputs/reports/*
 !outputs/reports/.gitkeep
 .coverage
 htmlcov/
+
+# Testing and coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Ruff
+.ruff_cache/
