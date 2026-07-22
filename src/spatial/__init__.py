@@ -5,6 +5,12 @@ from src.spatial.centroid import (
     centroid_from_frame,
     geographic_centroid,
 )
+from src.spatial.clusters import (
+    SpatialCluster,
+    SpatialClusteringResult,
+    cluster_coordinates,
+    cluster_frame,
+)
 from src.spatial.distance import (
     EARTH_RADIUS_KM,
     haversine_distance,
@@ -16,7 +22,11 @@ from src.spatial.distance import (
 __all__ = [
     "EARTH_RADIUS_KM",
     "GeographicCentroid",
+    "SpatialCluster",
+    "SpatialClusteringResult",
     "centroid_from_frame",
+    "cluster_coordinates",
+    "cluster_frame",
     "geographic_centroid",
     "haversine_distance",
     "pairwise_haversine_distances",
