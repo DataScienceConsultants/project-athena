@@ -20,6 +20,8 @@ jobs:
     name: Python 3.12 Quality Checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      PYTHONWARNINGS: error
 
     steps:
       - name: Check out repository

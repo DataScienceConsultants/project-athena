@@ -1,19 +1,38 @@
-"""Immutable result models for seismic swarm characterization."""
+"""Immutable public models for descriptive seismic swarm analysis."""
 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Literal
+
+TrendDirection = Literal["increasing", "decreasing", "stable", "insufficient_data"]
+ActivityStatus = Literal["active", "recently_active", "inactive", "insufficient_data"]
 
 
 @dataclass(frozen=True, slots=True)
-class SwarmCluster:
-    """Measured characteristics of one spatially clustered event sequence.
+class SwarmTrend:
+    """A linear event-property trend classified without forecasting."""
 
-    ``is_swarm_like`` is a descriptive screening flag, not an earthquake
-    prediction or a statement about the physical cause of a sequence.
-    """
+    slope_per_day: float | None
+    direction: TrendDirection
+    sample_count: int
 
+
+@dataclass(frozen=True, slots=True)
+class SwarmMigration:
+    """Centroid movement from the early to late portion of a swarm."""
+
+    distance_km: float
+    bearing_degrees: float | None
+    cardinal_direction: str
+    is_stationary: bool
+
+
+@dataclass(frozen=True, slots=True)
+class SeismicSwarm:
+    """Measured behavior of one DBSCAN event sequence, not a prediction."""
+
+    swarm_id: str
     cluster_id: int
     event_count: int
     start_time_utc: str
@@ -25,47 +44,33 @@ class SwarmCluster:
     centroid_longitude: float
     radius_km: float
     mean_magnitude: float
-    magnitude_trend_per_day: float | None
+    magnitude_trend: SwarmTrend
     mean_depth_km: float
-    depth_trend_km_per_day: float | None
-    migration_distance_km: float
-    migration_rate_km_per_day: float | None
+    depth_trend: SwarmTrend
+    migration: SwarmMigration
+    activity_status: ActivityStatus
     recent_event_count: int
-    recent_activity_fraction: float
-    is_swarm_like: bool
     member_indices: tuple[object, ...]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-compatible representation of this cluster."""
-
-        return asdict(self)
 
 
 @dataclass(frozen=True, slots=True)
 class SwarmAnalysisResult:
-    """The swarm-characterization output for an event catalog."""
+    """Complete output of a descriptive swarm analysis."""
 
-    swarms: tuple[SwarmCluster, ...]
+    swarms: tuple[SeismicSwarm, ...]
     input_event_count: int
     analyzed_event_count: int
     excluded_event_count: int
     noise_indices: tuple[object, ...]
-    recent_window_days: float
+    reference_time_utc: str | None
 
     @property
     def swarm_count(self) -> int:
-        """Return the number of characterized spatial event sequences."""
+        """Return the number of qualifying swarm sequences."""
 
         return len(self.swarms)
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-compatible representation of the analysis."""
+        """Return a JSON-compatible representation."""
 
-        return {
-            "swarms": [swarm.to_dict() for swarm in self.swarms],
-            "input_event_count": self.input_event_count,
-            "analyzed_event_count": self.analyzed_event_count,
-            "excluded_event_count": self.excluded_event_count,
-            "noise_indices": list(self.noise_indices),
-            "recent_window_days": self.recent_window_days,
-        }
+        return asdict(self)

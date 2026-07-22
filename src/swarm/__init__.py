@@ -1,6 +1,17 @@
 """Descriptive seismic swarm characterization for Project Athena."""
 
 from src.swarm.analysis import analyze_swarms
-from src.swarm.models import SwarmAnalysisResult, SwarmCluster
+from src.swarm.models import (
+    SeismicSwarm,
+    SwarmAnalysisResult,
+    SwarmMigration,
+    SwarmTrend,
+)
 
-__all__ = ["SwarmAnalysisResult", "SwarmCluster", "analyze_swarms"]
+__all__ = [
+    "SeismicSwarm",
+    "SwarmAnalysisResult",
+    "SwarmMigration",
+    "SwarmTrend",
+    "analyze_swarms",
+]
