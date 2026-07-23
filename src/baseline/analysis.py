@@ -11,6 +11,7 @@ from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from src.baseline.models import (
@@ -45,6 +46,12 @@ def _normalized_frame(dataframe: pd.DataFrame, timestamp_column: str, magnitude_
     frame["_time"] = parsed
     for source, target in ((magnitude_column, "_magnitude"), (depth_column, "_depth")):
         values = frame[source]
+        explicit_nan = values.map(
+            lambda value: isinstance(value, (float, np.floating))
+            and math.isnan(float(value))
+        )
+        if explicit_nan.any():
+            raise ValueError(f"{source} values must be finite when present.")
         if values.map(lambda value: isinstance(value, bool)).any():
             raise TypeError(f"{source} values must be numeric, not boolean.")
         numeric = pd.to_numeric(values, errors="coerce")
