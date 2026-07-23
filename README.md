@@ -175,3 +175,36 @@ project-athena/
 ├── .gitignore
 ├── requirements.txt
 └── README.md
+```
+
+## Historical catalog ingestion
+
+`src.catalog` provides a reusable, deterministic ingestion pipeline for USGS
+historical GeoJSON data. It is region-agnostic; Puerto Rico can be queried with
+the documented study bounds, while callers may supply any valid rectangular
+bounds. Records are normalized to `event_id`, `time`, `latitude`, `longitude`,
+`depth`, `magnitude`, `magnitude_type`, `place`, `event_type`, `source`, and
+`updated_time`. Timestamps are UTC, malformed or incomplete records are counted
+and excluded, and duplicate source/event IDs retain the most recently updated
+record before sorting by event time and ID.
+
+```python
+from datetime import datetime, timezone
+from src.catalog import (
+    CatalogQuery, GeographicBounds, export_csv, ingest_historical_catalog,
+)
+
+query = CatalogQuery(
+    start_time=datetime(2020, 1, 1, tzinfo=timezone.utc),
+    end_time=datetime(2020, 2, 1, tzinfo=timezone.utc),
+    bounds=GeographicBounds(17.0, 20.0, -69.0, -63.5),  # Puerto Rico region
+    minimum_magnitude=1.0,
+)
+result = ingest_historical_catalog(query)
+export_csv(result, "outputs/puerto_rico_2020_01.csv")
+print(result.summary.to_dict())
+```
+
+For tests or offline ingestion, pass a client object with a `fetch(query)` method
+that returns USGS GeoJSON features. The pipeline itself makes no assumptions
+about a particular location and does not make predictive claims.
