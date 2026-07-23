@@ -197,15 +197,23 @@ def test_parameter_validation(kwargs: dict[str, object]):
 
 def test_public_models_are_immutable():
     result = analyze_swarms(_events(), eps_km=3)
-    for model in (
-        result,
-        result.swarms[0],
-        result.swarms[0].magnitude_trend,
-        result.swarms[0].migration,
-    ):
-        with pytest.raises(FrozenInstanceError):
-            model.__setattr__("unused", None)
+    swarm = result.swarms[0]
+    trend = swarm.magnitude_trend
+    migration = swarm.migration
+
+    with pytest.raises(FrozenInstanceError):
+        result.swarms = ()
+
+    with pytest.raises(FrozenInstanceError):
+        swarm.event_count = 0
+
+    with pytest.raises(FrozenInstanceError):
+        trend.direction = "stable"
+
+    with pytest.raises(FrozenInstanceError):
+        migration.distance_km = 0.0
+
     assert isinstance(result, SwarmAnalysisResult)
-    assert isinstance(result.swarms[0], SeismicSwarm)
-    assert isinstance(result.swarms[0].magnitude_trend, SwarmTrend)
-    assert isinstance(result.swarms[0].migration, SwarmMigration)
+    assert isinstance(swarm, SeismicSwarm)
+    assert isinstance(trend, SwarmTrend)
+    assert isinstance(migration, SwarmMigration)
