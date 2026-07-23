@@ -296,7 +296,8 @@ def analyze_swarms(
                 ),
                 recent_event_count=int(
                     (
-                        sequence["_time"] >= reference - pd.Timedelta(days=recent_days)
+                        sequence["_time"]
+                        >= reference - pd.Timedelta(recent_days, unit="D")
                     ).sum()
                 ),
                 member_indices=members,
