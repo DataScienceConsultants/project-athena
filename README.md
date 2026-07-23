@@ -239,3 +239,37 @@ print(comparison.metrics["event_count"].classification)
 
 Baseline and comparison outputs are descriptive historical analytics, not
 earthquake predictions, future probabilities, official alerts, or warnings.
+
+## Explainable anomaly scoring
+
+`src.anomaly` converts an existing historical baseline and current-period
+comparison into a deterministic, metric-by-metric anomaly score. It does not
+recalculate the baseline: each configured metric uses the historical percentile
+rank already produced by `src.baseline`. Higher-than-usual one-sided metrics
+(event count, maximum magnitude, and total energy by default) contribute above
+the 50th percentile, while mean depth is scored in both directions so unusually
+shallow and unusually deep periods can be described.
+
+```python
+from src.anomaly import calculate_anomaly_score
+from src.baseline import calculate_historical_baselines, compare_current_period
+
+baseline = calculate_historical_baselines(historical_catalog)
+comparison = compare_current_period(
+    current_catalog,
+    baseline,
+    current_start="2024-02-01T00:00:00Z",
+    current_end="2024-02-02T00:00:00Z",
+)
+anomaly = calculate_anomaly_score(comparison)
+print(anomaly.summary)
+```
+
+This is a historical baseline → current-period comparison → anomaly score
+workflow. The result retains each metric's value, historical mean, percentile,
+direction, normalized weight, score contribution, and explanation so the
+composite is auditable.
+
+> **Important:** Anomaly scores are descriptive comparisons with historical
+> seismic activity. They do not predict earthquakes, estimate future earthquake
+> probability, or replace official earthquake and tsunami alerts.
