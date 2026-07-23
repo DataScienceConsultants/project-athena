@@ -88,7 +88,7 @@ def _summary(start: pd.Timestamp, period: BaselinePeriod, events: pd.DataFrame) 
     energies = magnitudes.map(magnitude_to_energy_joules)
     def stat(series: pd.Series, method: str) -> float | None:
         return None if series.empty else float(getattr(series, method)())
-    days = (end - start).total_seconds() / 86400
+    days = (end - start) / pd.Timedelta(days=1)
     return HistoricalPeriodSummary(start.to_pydatetime(), end.to_pydatetime(), period, len(events), len(events) / days,
         stat(magnitudes, "mean"), stat(magnitudes, "median"), stat(magnitudes, "max"), stat(magnitudes, "min"), len(magnitudes),
         stat(depths, "mean"), stat(depths, "median"), stat(depths, "min"), stat(depths, "max"), len(depths),
@@ -137,7 +137,7 @@ def compare_current_period(dataframe: pd.DataFrame, baseline: HistoricalBaseline
         raise ValueError("current_end must be later than current_start.")
     frame, _ = _normalized_frame(dataframe, timestamp_column, magnitude_column, depth_column)
     frame = frame.loc[(frame["_time"] >= start) & (frame["_time"] < end)]
-    days = (end - start).total_seconds() / 86400
+    days = (end - start) / pd.Timedelta(days=1)
     current = _summary(start, BaselinePeriod.DAILY, frame)
     values: dict[str, float | None] = {name: getattr(current, name) for name in _PRIMARY}
     values["event_rate_per_day"] = len(frame) / days
