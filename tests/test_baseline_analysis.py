@@ -34,13 +34,37 @@ def test_weekly_and_monthly_calendar_periods() -> None:
 
 
 def test_missing_and_custom_columns_do_not_mutate() -> None:
-    frame = pd.DataFrame({"when": ["2024-01-01", None], "mag": [None, 3], "deep": [None, 4]})
+    frame = pd.DataFrame(
+        {
+            "when": ["2024-01-01", None],
+            "mag": pd.Series([None, 3], dtype=object),
+            "deep": pd.Series([None, 4], dtype=object),
+        }
+    )
     original = frame.copy(deep=True)
     result = calculate_historical_baselines(frame, timestamp_column="when", magnitude_column="mag", depth_column="deep")
-    assert result.source_row_count == 2 and result.accepted_row_count == 1
+    assert result.source_row_count == 2
+    assert result.accepted_row_count == 1
     assert result.excluded_missing_timestamp_count == 1
-    assert result.periods[0].event_count == 1 and result.periods[0].magnitude_event_count == 0
+    assert result.periods[0].event_count == 1
+    assert result.periods[0].magnitude_event_count == 0
     pd.testing.assert_frame_equal(frame, original)
+
+
+def test_pd_na_metric_values_are_allowed() -> None:
+    frame = pd.DataFrame(
+        {
+            "time": ["2024-01-01"],
+            "magnitude": pd.Series([pd.NA], dtype=object),
+            "depth": pd.Series([pd.NA], dtype=object),
+        }
+    )
+
+    result = calculate_historical_baselines(frame)
+
+    assert result.periods[0].event_count == 1
+    assert result.periods[0].magnitude_event_count == 0
+    assert result.periods[0].depth_event_count == 0
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), True])
