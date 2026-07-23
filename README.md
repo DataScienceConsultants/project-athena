@@ -208,3 +208,34 @@ print(result.summary.to_dict())
 For tests or offline ingestion, pass a client object with a `fetch(query)` method
 that returns USGS GeoJSON features. The pipeline itself makes no assumptions
 about a particular location and does not make predictive claims.
+
+## Historical activity baselines
+
+`src.baseline` provides deterministic descriptive baselines across UTC calendar
+days, Monday-start weeks, or calendar months. It includes zero-event periods so
+quiet intervals remain part of the historical distribution.
+
+```python
+from datetime import datetime, timezone
+import pandas as pd
+
+from src.baseline import BaselineConfiguration, calculate_historical_baselines, compare_current_period
+
+historical_catalog = pd.DataFrame({
+    "time": ["2024-01-01T12:00:00Z", "2024-01-03T08:00:00Z"],
+    "magnitude": [2.1, 3.0],
+    "depth": [8.0, 12.0],
+})
+baseline = calculate_historical_baselines(
+    historical_catalog, BaselineConfiguration(period="daily")
+)
+comparison = compare_current_period(
+    pd.DataFrame({"time": [], "magnitude": [], "depth": []}), baseline,
+    current_start=datetime(2024, 2, 1, tzinfo=timezone.utc),
+    current_end=datetime(2024, 2, 8, tzinfo=timezone.utc),
+)
+print(comparison.metrics["event_count"].classification)
+```
+
+Baseline and comparison outputs are descriptive historical analytics, not
+earthquake predictions, future probabilities, official alerts, or warnings.
