@@ -172,7 +172,9 @@ def test_custom_columns_missing_rows_and_utc_normalization():
     ],
 )
 def test_rejects_invalid_present_event_values(column: str, value: object):
-    frame = _events().astype({"time": "object", "longitude": "object"})
+    # Keep this parametrized invalid-input fixture object-typed so assigning a
+    # deliberately invalid value never emits pandas' incompatible-dtype warning.
+    frame = _events().astype(object)
     frame.at[10, column] = value
     with pytest.raises((TypeError, ValueError)):
         analyze_swarms(frame)
