@@ -278,6 +278,7 @@ class ObservatoryIntelligenceReport:
     executive_summary: str
     disclaimer: str
     include_time_series_points: bool = True
+    include_metric_details: bool = True
 
     def __post_init__(self) -> None:
         if not isinstance(self.recent_periods, tuple):
@@ -290,14 +291,34 @@ class ObservatoryIntelligenceReport:
         time_series = self.time_series.to_dict()
         if not self.include_time_series_points:
             time_series.pop("points", None)
+        if not self.include_metric_details:
+            time_series = _without_metric_details(time_series)
+        snapshot = _serialize(self.snapshot)
+        recent_periods = _serialize(self.recent_periods)
+        if not self.include_metric_details:
+            snapshot = _without_metric_details(snapshot)
+            recent_periods = _without_metric_details(recent_periods)
         return {
             "schema_version": self.schema_version,
             "methodology_version": self.methodology_version,
             "observatory": self.observatory.to_dict(),
             "time_series": time_series,
-            "snapshot": _serialize(self.snapshot),
-            "recent_periods": _serialize(self.recent_periods),
+            "snapshot": snapshot,
+            "recent_periods": recent_periods,
             "metadata": _serialize(self.metadata),
             "executive_summary": self.executive_summary,
             "disclaimer": self.disclaimer,
         }
+
+
+def _without_metric_details(value: object) -> object:
+    """Remove detailed comparison and contributor payloads from serialization."""
+    if isinstance(value, dict):
+        return {
+            key: _without_metric_details(item)
+            for key, item in value.items()
+            if key not in {"comparison", "latest_comparison", "metric_scores"}
+        }
+    if isinstance(value, list):
+        return [_without_metric_details(item) for item in value]
+    return value
