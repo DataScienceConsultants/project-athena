@@ -349,3 +349,35 @@ output.
 > activity and anomaly-score behavior. They do not predict earthquakes,
 > estimate future earthquake probability, or replace official earthquake and
 > tsunami alerts.
+
+## Unified Observatory intelligence report
+
+The legacy Observatory report remains available with `python -m src.observatory.report`.
+It summarizes catalog activity, magnitude, estimated energy, depth, and a threshold-based
+Observatory status. The unified report adds the existing historical baseline comparisons,
+explainable anomaly scores, complete time series, a descriptive temporal trend, and the
+most recent periods. It does not recalculate those analytical layers.
+
+```bash
+python -m src.observatory.report --intelligence
+python -m src.observatory.report --intelligence --frequency daily \
+  --baseline-lookback 30 --minimum-baseline-periods 7 --recent-periods 10
+```
+
+```python
+from src.observatory import (
+    ObservatoryIntelligenceConfiguration,
+    build_observatory_intelligence_report,
+)
+report = build_observatory_intelligence_report(
+    configuration=ObservatoryIntelligenceConfiguration(),
+)
+print(report.executive_summary)
+```
+
+Observatory status is a threshold-based descriptive classification. Anomaly level describes
+how unusual observed metrics are against historical baselines, while the temporal trend
+describes movement in historical anomaly scores. Recent periods are the latest configured
+number of chronological periods. None of these outputs predicts a future earthquake.
+
+> Project Athena reports describe historical seismic observations and analytical anomaly behavior. They are descriptive and nonpredictive. They do not predict earthquakes, estimate future earthquake probability, determine imminent danger, or replace official earthquake, tsunami, or emergency-management information.

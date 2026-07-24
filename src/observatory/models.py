@@ -12,8 +12,45 @@ The same Observatory report can later be:
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from typing import Any
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from enum import StrEnum
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, Mapping
+
+if TYPE_CHECKING:
+    from src.anomaly import SeismicAnomalyResult
+    from src.baseline import CurrentPeriodComparison
+    from src.timeseries import (
+        ObservatoryTimeSeriesPoint, ObservatoryTimeSeriesResult, TimeSeriesConfiguration,
+    )
+    from src.trends import TemporalTrendResult
+
+
+def _default_time_series_configuration() -> "TimeSeriesConfiguration":
+    from src.timeseries import TimeSeriesConfiguration, TimeSeriesFrequency
+
+    return TimeSeriesConfiguration(
+        frequency=TimeSeriesFrequency.DAILY, baseline_lookback_periods=30,
+        minimum_baseline_periods=7, include_unavailable_periods=True,
+    )
+
+
+def _serialize(value: object) -> object:
+    """Convert established nested models without recursively invoking this root."""
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    if isinstance(value, StrEnum):
+        return value.value
+    if isinstance(value, Mapping):
+        return {str(key): _serialize(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_serialize(item) for item in value]
+    if hasattr(value, "to_dict"):
+        return _serialize(value.to_dict())
+    if hasattr(value, "__dataclass_fields__"):
+        return {name: _serialize(getattr(value, name)) for name in value.__dataclass_fields__}
+    return value
 
 from src.observatory.thresholds import (
     STATUS_DISPLAY_NAMES,
@@ -184,4 +221,83 @@ class ObservatoryReport:
             "energy": self.energy.to_dict(),
             "depth": self.depth.to_dict(),
             "status": self.status.to_dict(),
+        }
+@dataclass(frozen=True, slots=True)
+class ObservatoryIntelligenceConfiguration:
+    """Configuration for the unified descriptive intelligence report."""
+
+    time_series_configuration: "TimeSeriesConfiguration" = field(default_factory=_default_time_series_configuration)
+    recent_period_limit: int = 10
+    include_time_series_points: bool = True
+    include_unavailable_periods: bool = True
+    include_metric_details: bool = True
+
+    def __post_init__(self) -> None:
+        from src.timeseries import TimeSeriesConfiguration
+
+        if not isinstance(self.time_series_configuration, TimeSeriesConfiguration):
+            raise TypeError("time_series_configuration must be a TimeSeriesConfiguration.")
+        if isinstance(self.recent_period_limit, bool) or not isinstance(self.recent_period_limit, int):
+            raise TypeError("recent_period_limit must be an integer, not boolean.")
+        if self.recent_period_limit <= 0:
+            raise ValueError("recent_period_limit must be greater than zero.")
+        for name in ("include_time_series_points", "include_unavailable_periods", "include_metric_details"):
+            if not isinstance(getattr(self, name), bool):
+                raise TypeError(f"{name} must be a bool.")
+
+
+@dataclass(frozen=True, slots=True)
+class ObservatoryIntelligenceSnapshot:
+    latest_period_start: datetime | None
+    latest_period_end: datetime | None
+    latest_current_event_count: int | None
+    latest_baseline_start: datetime | None
+    latest_baseline_end: datetime | None
+    latest_baseline_period_count: int | None
+    latest_comparison: "CurrentPeriodComparison | None"
+    latest_anomaly: "SeismicAnomalyResult | None"
+    trend: "TemporalTrendResult"
+    latest_available: bool
+    unavailable_reason: str | None
+    summary: str
+
+    def __post_init__(self) -> None:
+        if self.latest_available != (self.latest_anomaly is not None):
+            raise ValueError("latest_available must match latest_anomaly availability.")
+
+
+@dataclass(frozen=True, slots=True)
+class ObservatoryIntelligenceReport:
+    schema_version: str
+    methodology_version: str
+    observatory: ObservatoryReport
+    time_series: "ObservatoryTimeSeriesResult"
+    snapshot: ObservatoryIntelligenceSnapshot
+    recent_periods: tuple["ObservatoryTimeSeriesPoint", ...]
+    metadata: Mapping[str, object]
+    executive_summary: str
+    disclaimer: str
+    include_time_series_points: bool = True
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.recent_periods, tuple):
+            raise TypeError("recent_periods must be a tuple.")
+        if tuple(sorted(self.recent_periods, key=lambda point: point.period_start)) != self.recent_periods:
+            raise ValueError("recent_periods must be ordered by period_start.")
+        object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
+
+    def to_dict(self) -> dict[str, Any]:
+        time_series = self.time_series.to_dict()
+        if not self.include_time_series_points:
+            time_series.pop("points", None)
+        return {
+            "schema_version": self.schema_version,
+            "methodology_version": self.methodology_version,
+            "observatory": self.observatory.to_dict(),
+            "time_series": time_series,
+            "snapshot": _serialize(self.snapshot),
+            "recent_periods": _serialize(self.recent_periods),
+            "metadata": _serialize(self.metadata),
+            "executive_summary": self.executive_summary,
+            "disclaimer": self.disclaimer,
         }

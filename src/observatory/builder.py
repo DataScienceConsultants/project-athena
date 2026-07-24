@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -330,9 +330,7 @@ def build_observatory_report_from_dataframe(
     )
 
     return ObservatoryReport(
-        generated_at_utc=datetime.now(
-            timezone.utc
-        ).isoformat(),
+        generated_at_utc=last_event_time.isoformat(),
         catalog=CatalogSection(
             catalog_path=_display_path(catalog_path),
             region_key=region_key,
