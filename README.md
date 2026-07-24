@@ -273,3 +273,32 @@ composite is auditable.
 > **Important:** Anomaly scores are descriptive comparisons with historical
 > seismic activity. They do not predict earthquakes, estimate future earthquake
 > probability, or replace official earthquake and tsunami alerts.
+
+## Temporal anomaly trends
+
+`src.trends` describes how previously calculated anomaly scores move across
+ordered observation periods. It consumes anomaly results directly; it does not
+recalculate baselines or anomaly scores, infer the spacing between periods, or
+make a forecast.
+
+```python
+from src.trends import calculate_temporal_trend
+
+trend = calculate_temporal_trend(tuple(anomaly_results))
+print(trend.summary)
+```
+
+Each trend point contains trailing short-, medium-, and long-window arithmetic
+moving averages calculated from available scores only. The result also reports
+an ordinary-least-squares slope in score points per observation period, the
+latest score's momentum relative to its short moving average, and the change
+between non-overlapping previous and current slopes (acceleration). Consecutive
+strict increases and decreases describe persistence. Direction and strength are
+deterministic descriptive classifications based on configured score-movement,
+persistence, and historical first-to-latest change thresholds. Unavailable
+scores remain represented in the output but never count as zero or enter these
+numeric calculations.
+
+> **Important:** Temporal trend results describe changes in historical anomaly
+> scores. They do not predict earthquakes, estimate future earthquake
+> probability, or replace official earthquake and tsunami alerts.
