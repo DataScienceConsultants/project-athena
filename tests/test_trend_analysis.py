@@ -51,7 +51,7 @@ def test_decreasing_flat_and_noisy_sequences() -> None:
     assert flat.momentum == 0
     assert flat.percent_change_from_first == 0
     noisy = calculate_temporal_trend(results([1, 4, 2, 5]))
-    assert noisy.current_slope == pytest.approx(1.2)
+    assert noisy.current_slope == pytest.approx(1.0)
 
 
 def test_missing_scores_and_moving_averages() -> None:
