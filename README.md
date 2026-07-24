@@ -302,3 +302,50 @@ numeric calculations.
 > **Important:** Temporal trend results describe changes in historical anomaly
 > scores. They do not predict earthquakes, estimate future earthquake
 > probability, or replace official earthquake and tsunami alerts.
+
+## Observatory time-series builder
+
+`src.timeseries` builds a deterministic sequence of calendar-aligned historical
+comparisons, anomaly results, and one final temporal trend directly from a
+seismic catalog. Daily periods start at midnight UTC, weekly periods start on
+Monday at midnight UTC, and monthly periods use true calendar-month boundaries.
+All generated periods are non-overlapping half-open intervals (`[start, end)`).
+Naive catalog timestamps are interpreted as UTC; an explicit `analysis_start`
+is aligned down to its containing period, while an explicit `analysis_end` is a
+hard bound and omits a final partial natural period.
+
+```python
+from src.timeseries import (
+    TimeSeriesConfiguration,
+    TimeSeriesFrequency,
+    build_observatory_time_series,
+)
+
+configuration = TimeSeriesConfiguration(
+    frequency=TimeSeriesFrequency.DAILY,
+    baseline_lookback_periods=30,
+    minimum_baseline_periods=7,
+)
+
+result = build_observatory_time_series(catalog, configuration)
+print(result.summary)
+print(result.trend.summary)
+```
+
+For every eligible observation period, the builder uses a rolling window of
+complete preceding calendar periods and invokes the public baseline,
+current-period comparison, anomaly-scoring, and temporal-trend APIs. The
+baseline ends exactly at the current period start, so it cannot contain current
+or future events. Empty current periods are valid zero-event observations.
+Periods without enough covered history or without a usable baseline are retained
+with a deterministic unavailable reason by default; setting
+`include_unavailable_periods=False` hides only those points and does not change
+counts, anomaly results, or trend input. An anomaly object with `score=None` is
+still an available builder point and remains in the final trend sequence.
+Results are immutable and provide deterministic JSON-serializable `to_dict()`
+output.
+
+> **Important:** Observatory time-series results describe historical seismic
+> activity and anomaly-score behavior. They do not predict earthquakes,
+> estimate future earthquake probability, or replace official earthquake and
+> tsunami alerts.
