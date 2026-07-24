@@ -26,8 +26,12 @@ def test_daily_pipeline_is_ordered_immutable_and_deterministic() -> None:
     assert first_serialized == second.to_dict()
     assert first.candidate_period_count == 10
     assert first.available_period_count == 10
+    assert first.unavailable_period_count == 0
     assert first.points[0].period_start.isoformat() == "2024-01-03T00:00:00+00:00"
     assert first.points[0].baseline_start.isoformat() == "2023-12-31T00:00:00+00:00"
+    assert first.points[0].baseline_end == first.points[0].period_start
+    assert first.points[0].baseline_start < first.points[0].period_start
+    assert (first.points[0].baseline_end - first.points[0].baseline_start).days == 3
     assert first.points[0].comparison is not None
     assert first.points[0].anomaly is not None
     assert first.trend.source_result_count == 10
@@ -53,7 +57,9 @@ def test_empty_current_period_and_insufficient_history_are_explicit() -> None:
     assert result.points[0].unavailable_reason == "insufficient_baseline_history"
     empty = next(point for point in result.points if point.period_start.day == 5)
     assert empty.current_event_count == 0
+    assert empty.comparison is not None
     assert empty.anomaly is not None
+    assert empty.unavailable_reason is None
 
 
 def test_weekly_monthly_and_hard_end_boundaries() -> None:
@@ -61,9 +67,32 @@ def test_weekly_monthly_and_hard_end_boundaries() -> None:
     weekly = build_observatory_time_series(catalog, TimeSeriesConfiguration(frequency=TimeSeriesFrequency.WEEKLY, baseline_lookback_periods=2, minimum_baseline_periods=1))
     assert all(point.period_start.weekday() == 0 for point in weekly.points)
     assert all((point.period_end - point.period_start).days == 7 for point in weekly.points)
+    assert all(point.baseline_start < point.period_start for point in weekly.points)
+    assert all((point.period_start - point.baseline_start).days == 14 for point in weekly.points)
     monthly = build_observatory_time_series(catalog, TimeSeriesConfiguration(frequency=TimeSeriesFrequency.MONTHLY, baseline_lookback_periods=2, minimum_baseline_periods=1))
     assert all(point.period_start.day == point.period_end.day == 1 for point in monthly.points)
     assert all(point.period_end > point.period_start for point in monthly.points)
+    assert all(point.baseline_start < point.period_start for point in monthly.points)
+    assert all(point.baseline_start.day == 1 for point in monthly.points)
+
+
+def test_future_events_do_not_affect_earlier_periods() -> None:
+    catalog = _catalog(8)
+    configuration = TimeSeriesConfiguration(
+        baseline_lookback_periods=3,
+        minimum_baseline_periods=2,
+        analysis_end=datetime(2024, 1, 7, tzinfo=timezone.utc),
+    )
+    baseline = build_observatory_time_series(catalog, configuration)
+    future = pd.concat(
+        [
+            catalog,
+            pd.DataFrame({"time": ["2024-02-01T12:00:00Z"], "magnitude": [9.9], "depth": [1.0]}),
+        ],
+        ignore_index=True,
+    )
+    with_future = build_observatory_time_series(future, configuration)
+    assert baseline.to_dict()["points"] == with_future.to_dict()["points"]
 
 
 def test_empty_catalog_and_validation() -> None:

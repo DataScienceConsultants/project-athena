@@ -76,7 +76,7 @@ def _empty_point(start: datetime, end: datetime, baseline_start: datetime, count
 
 
 def _build_summary(result: ObservatoryTimeSeriesResult) -> str:
-    disclaimer = "This observatory time series is descriptive and is not an earthquake prediction or warning."
+    disclaimer = "This observatory time series is descriptive and nonpredictive. It is not an earthquake prediction or warning."
     if result.candidate_period_count == 0:
         return f"No {result.frequency.value} observatory time-series periods could be built from {result.source_event_count} catalog events. {disclaimer}"
     trend = result.trend
@@ -131,7 +131,7 @@ def build_observatory_time_series(catalog: pd.DataFrame, configuration: TimeSeri
             complete_prior += 1
             prior_cursor = _next(prior_cursor, configuration.frequency)
         baseline_count = min(complete_prior, configuration.baseline_lookback_periods)
-        baseline_start = _shift(period_start, configuration.baseline_lookback_periods, configuration.frequency)
+        baseline_start = _shift(period_start, -configuration.baseline_lookback_periods, configuration.frequency)
         current = frame.loc[(frame["time"] >= period_start) & (frame["time"] < period_end)]
         current_count = len(current)
         if complete_prior < configuration.minimum_baseline_periods:
