@@ -47,7 +47,9 @@ def test_full_integration_serialization_rendering_and_json(monkeypatch: pytest.M
     first = report.to_dict()
     assert first == report.to_dict()
     assert json.dumps(first, allow_nan=False)
+    assert first["metadata"]["catalog_as_of_utc"] == "2024-01-14T12:00:00Z"
     assert first["metadata"]["catalog_as_of_utc"].endswith("Z")
+    assert "+00:00" not in first["metadata"]["catalog_as_of_utc"]
     output = render_intelligence_terminal_report(report)
     for heading in ("PROJECT ATHENA SEISMIC OBSERVATORY INTELLIGENCE REPORT", "LATEST ANALYTICAL SNAPSHOT", "TEMPORAL ANOMALY TREND", "RECENT PERIODS", "EXECUTIVE SUMMARY", "DISCLAIMER"):
         assert heading in output

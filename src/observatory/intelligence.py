@@ -64,7 +64,7 @@ def build_observatory_intelligence_report(
         "include_metric_details": configuration.include_metric_details,
         "source_catalog_path": observatory.catalog.catalog_path,
         "source_event_count": series.source_event_count,
-        "catalog_as_of_utc": observatory.catalog.last_event_time_utc,
+        "catalog_as_of_utc": series.metadata["last_catalog_timestamp"],
         "available_period_count": series.available_period_count,
         "unavailable_period_count": series.unavailable_period_count,
         "baseline_excludes_current_period": True,
