@@ -21,7 +21,9 @@ def test_daily_pipeline_is_ordered_immutable_and_deterministic() -> None:
     config = TimeSeriesConfiguration(baseline_lookback_periods=3, minimum_baseline_periods=2)
     first = build_observatory_time_series(catalog, config)
     second = build_observatory_time_series(catalog.copy(deep=True), config)
-    assert first.to_dict() == second.to_dict()
+    first_serialized = first.to_dict()
+    assert first_serialized == first.to_dict()
+    assert first_serialized == second.to_dict()
     assert first.candidate_period_count == 10
     assert first.available_period_count == 10
     assert first.points[0].period_start.isoformat() == "2024-01-03T00:00:00+00:00"
@@ -32,7 +34,17 @@ def test_daily_pipeline_is_ordered_immutable_and_deterministic() -> None:
     with pytest.raises(TypeError):
         first.metadata["x"] = 1
     pdt.assert_frame_equal(catalog, original)
-    assert json.dumps(first.to_dict())
+    assert json.dumps(first_serialized)
+    assert isinstance(first_serialized["metadata"], dict)
+    assert isinstance(first_serialized["points"][0], dict)
+    point = first_serialized["points"][0]
+    assert isinstance(point["comparison"], dict)
+    assert isinstance(point["anomaly"], dict)
+    assert isinstance(first_serialized["trend"], dict)
+    assert point["period_start"].endswith("Z")
+    assert first_serialized["metadata"]["first_catalog_timestamp"].endswith("Z")
+    assert first.points[0].comparison is not None
+    assert first.points[0].anomaly is not None
 
 
 def test_empty_current_period_and_insufficient_history_are_explicit() -> None:

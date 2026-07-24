@@ -125,6 +125,7 @@ class ObservatoryTimeSeriesResult:
         object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
 
     def to_dict(self) -> dict[str, object]:
+        """Return a deterministic, JSON-serializable representation."""
         def convert(value: object) -> object:
             if isinstance(value, datetime):
                 return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -134,11 +135,26 @@ class ObservatoryTimeSeriesResult:
                 return {str(key): convert(item) for key, item in value.items()}
             if isinstance(value, tuple):
                 return [convert(item) for item in value]
-            if hasattr(value, "to_dict"):
-                return value.to_dict()
             if hasattr(value, "__dataclass_fields__"):
-                return {name: convert(getattr(value, name)) for name in value.__dataclass_fields__}
+                return {
+                    name: convert(getattr(value, name))
+                    for name in value.__dataclass_fields__
+                }
+            if hasattr(value, "to_dict"):
+                return convert(value.to_dict())
             return value
-        serialized = convert(self)
-        assert isinstance(serialized, dict)
-        return serialized
+
+        return {
+            "analysis_start": convert(self.analysis_start),
+            "analysis_end": convert(self.analysis_end),
+            "frequency": convert(self.frequency),
+            "source_event_count": self.source_event_count,
+            "candidate_period_count": self.candidate_period_count,
+            "available_period_count": self.available_period_count,
+            "unavailable_period_count": self.unavailable_period_count,
+            "anomaly_results": convert(self.anomaly_results),
+            "points": convert(self.points),
+            "trend": convert(self.trend),
+            "metadata": convert(self.metadata),
+            "summary": self.summary,
+        }
