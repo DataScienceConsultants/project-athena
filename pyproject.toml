@@ -8,6 +8,9 @@ version = "0.4.1"
 description = "Experimental seismic intelligence and observatory platform."
 readme = "README.md"
 requires-python = ">=3.12"
+dependencies = [
+    "pandas>=2.2,<3",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
