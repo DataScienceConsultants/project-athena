@@ -1,124 +1,77 @@
-"""Version-controlled geographic region definitions for catalog operations."""
-
+"""Built-in Caribbean catalog regions."""
 from __future__ import annotations
 
-import json
-import math
 from dataclasses import dataclass
-from pathlib import Path
+import math
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Mapping
 
 from src.catalog.models import GeographicBounds
 
-DEFAULT_REGIONS_PATH = Path(__file__).parents[2] / "config" / "regions.json"
-
-
-def _finite_number(value: object, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError(f"{name} must be numeric, not boolean.")
-    result = float(value)
-    if not math.isfinite(result):
-        raise ValueError(f"{name} must be finite.")
-    return result
-
 
 @dataclass(frozen=True, slots=True)
-class CatalogRegion:
-    """Immutable named catalog region loaded from ``config/regions.json``."""
-
-    region_id: str
+class Region:
+    key: str
     name: str
-    description: str
     bounds: GeographicBounds
-    default_minimum_magnitude: float
-    timezone: str
-    enabled: bool = True
+    default_minimum_magnitude: float = 1.0
 
     def __post_init__(self) -> None:
-        for field_name in ("region_id", "name", "timezone"):
-            value = getattr(self, field_name)
-            if not isinstance(value, str) or not value.strip():
-                raise ValueError(f"{field_name} must be a nonempty string.")
-        if not isinstance(self.description, str):
-            raise TypeError("description must be a string.")
+        if not isinstance(self.key, str) or not self.key.strip():
+            raise ValueError("key must be a nonempty string.")
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValueError("name must be a nonempty string.")
         if not isinstance(self.bounds, GeographicBounds):
             raise TypeError("bounds must be GeographicBounds.")
-        object.__setattr__(
-            self,
-            "default_minimum_magnitude",
-            _finite_number(self.default_minimum_magnitude, "default_minimum_magnitude"),
-        )
-        if not isinstance(self.enabled, bool):
-            raise TypeError("enabled must be boolean.")
+        if isinstance(self.default_minimum_magnitude, bool) or not isinstance(self.default_minimum_magnitude, (int, float)):
+            raise TypeError("default_minimum_magnitude must be numeric, not boolean.")
+        if not math.isfinite(float(self.default_minimum_magnitude)):
+            raise ValueError("default_minimum_magnitude must be finite.")
+        object.__setattr__(self, "key", self.key.strip().lower())
+        object.__setattr__(self, "name", self.name.strip())
+        object.__setattr__(self, "default_minimum_magnitude", float(self.default_minimum_magnitude))
 
+    def contains(self, latitude: float, longitude: float) -> bool:
+        return self.bounds.contains(latitude, longitude)
+
+
+PUERTO_RICO = Region("puerto_rico", "Puerto Rico", GeographicBounds(17.0, 20.0, -69.0, -63.5), 1.0)
+VIRGIN_ISLANDS = Region("virgin_islands", "Virgin Islands", GeographicBounds(17.0, 19.5, -65.5, -62.0), 1.0)
+MONA_PASSAGE = Region("mona_passage", "Mona Passage", GeographicBounds(17.0, 20.0, -69.5, -66.5), 1.0)
+DOMINICAN_REPUBLIC = Region("dominican_republic", "Dominican Republic", GeographicBounds(17.0, 20.5, -72.5, -68.0), 1.5)
+LESSER_ANTILLES = Region("lesser_antilles", "Lesser Antilles", GeographicBounds(10.0, 19.5, -64.5, -58.0), 1.5)
+CARIBBEAN = Region("caribbean", "Caribbean", GeographicBounds(9.0, 23.0, -89.0, -58.0), 2.0)
+
+REGIONS: Mapping[str, Region] = MappingProxyType({region.key: region for region in (
+    PUERTO_RICO, VIRGIN_ISLANDS, MONA_PASSAGE, DOMINICAN_REPUBLIC, LESSER_ANTILLES, CARIBBEAN,
+)})
+
+
+def get_region(key: str = PUERTO_RICO.key) -> Region:
+    """Look up a built-in region case-insensitively with whitespace trimmed."""
+    if not isinstance(key, str):
+        raise TypeError("region key must be a string.")
+    normalized = key.strip().lower().replace(" ", "_").replace("-", "_")
+    try:
+        return REGIONS[normalized]
+    except KeyError as exc:
+        raise KeyError(f"Unknown catalog region: {key!r}") from exc
+
+
+# Compatibility names retained for the first catalog implementation.
+CatalogRegion = Region
 
 @dataclass(frozen=True, slots=True)
 class RegionRegistry:
-    """Immutable collection of configured regions and its default region ID."""
+    default_region: str = PUERTO_RICO.key
+    regions: Mapping[str, Region] = REGIONS
 
-    default_region: str
-    regions: Mapping[str, CatalogRegion]
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.default_region, str) or not self.default_region:
-            raise ValueError("default_region must be a nonempty string.")
-        copied = dict(self.regions)
-        if self.default_region not in copied:
-            raise ValueError("default_region must identify a configured region.")
-        if any(key != region.region_id for key, region in copied.items()):
-            raise ValueError("Region keys must match their region_id values.")
-        object.__setattr__(self, "regions", MappingProxyType(copied))
-
-    def get(self, region_id: str | None = None, *, require_enabled: bool = True) -> CatalogRegion:
-        """Return a configured region, optionally allowing disabled definitions."""
-        selected = self.default_region if region_id is None else region_id
-        try:
-            region = self.regions[selected]
-        except KeyError as exc:
-            raise KeyError(f"Unknown catalog region: {selected}") from exc
-        if require_enabled and not region.enabled:
-            raise ValueError(f"Catalog region is disabled: {selected}")
-        return region
+    def get(self, region_id: str | None = None, *, require_enabled: bool = True) -> Region:
+        del require_enabled
+        return get_region(region_id or self.default_region)
 
 
-def load_regions(path: str | Path = DEFAULT_REGIONS_PATH) -> RegionRegistry:
-    """Load and strictly validate a region registry from JSON."""
-    source = Path(path)
-    try:
-        payload = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Unable to load catalog regions from {source}: {exc}") from exc
-    if not isinstance(payload, dict) or not isinstance(payload.get("regions"), dict):
-        raise ValueError("Region configuration must contain a regions object.")
-    default = payload.get("default_region")
-    if not isinstance(default, str):
-        raise ValueError("Region configuration must contain default_region.")
-    regions: dict[str, CatalogRegion] = {}
-    for region_id, raw in payload["regions"].items():
-        if not isinstance(region_id, str) or not isinstance(raw, dict):
-            raise ValueError("Each region must be a named object.")
-        bounds = raw.get("bounds")
-        if not isinstance(bounds, dict):
-            raise ValueError(f"Region {region_id} must contain bounds.")
-        try:
-            regions[region_id] = CatalogRegion(
-                region_id=region_id,
-                name=raw["name"],
-                description=raw.get("description", ""),
-                bounds=GeographicBounds(
-                    bounds["min_latitude"], bounds["max_latitude"],
-                    bounds["min_longitude"], bounds["max_longitude"],
-                ),
-                default_minimum_magnitude=raw["default_minimum_magnitude"],
-                timezone=raw["timezone"],
-                enabled=raw.get("enabled", True),
-            )
-        except KeyError as exc:
-            raise ValueError(f"Region {region_id} is missing {exc.args[0]}.") from exc
-    return RegionRegistry(default, regions)
-
-
-def get_region(region_id: str | None = None, path: str | Path = DEFAULT_REGIONS_PATH) -> CatalogRegion:
-    """Convenience lookup using the repository region configuration."""
-    return load_regions(path).get(region_id)
+def load_regions(path=None) -> RegionRegistry:
+    """Return built-ins; *path* remains accepted for API compatibility."""
+    del path
+    return RegionRegistry()

@@ -1,67 +1,60 @@
-"""Incremental historical catalog updates."""
+"""Failure-safe historical catalog updates."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
-import pandas as pd
+from typing import Protocol
 
-from src.catalog.deduplicator import deduplicate_catalog
-from src.catalog.export import to_dataframe
-from src.catalog.models import CatalogQuery, GeographicBounds
-from src.catalog.pipeline import HistoricalCatalogIngestor
-from src.catalog.storage import load_catalog, save_catalog
-from src.catalog.validator import normalize_catalog
+from src.catalog.deduplicator import merge_events
+from src.catalog.downloader import USGSCatalogDownloader
+from src.catalog.models import CatalogEvent, CatalogQuery
+from src.catalog.regions import PUERTO_RICO, Region
+from src.catalog.storage import ParquetCatalogStorage
 
+
+class Downloader(Protocol):
+    def download(self, query: CatalogQuery) -> tuple[CatalogEvent, ...]: ...
+
+class Storage(Protocol):
+    def load(self, region: Region, *, start=None, end=None) -> tuple[CatalogEvent, ...]: ...
+    def save(self, region: Region, events: tuple[CatalogEvent, ...]): ...
 
 @dataclass(frozen=True, slots=True)
 class CatalogUpdateResult:
-    path: Path
-    previous_count: int
+    events: tuple[CatalogEvent, ...]
     downloaded_count: int
-    duplicate_count: int
+    existing_count: int
+    inserted_count: int
+    updated_count: int
+    unchanged_count: int
     final_count: int
-    query_start: datetime
-    query_end: datetime
 
 
-def update_catalog(path: str | Path, *, end_time: datetime, bounds: GeographicBounds,
-                   minimum_magnitude: float | None = None, client: object | None = None,
-                   overlap: timedelta = timedelta(days=1), start_time: datetime | None = None) -> CatalogUpdateResult:
-    """Download new/changed events, merge deterministically, and atomically save.
+class CatalogUpdater:
+    def __init__(self, region: Region = PUERTO_RICO, *, downloader: Downloader | None = None,
+                 storage: Storage | None = None) -> None:
+        if not isinstance(region, Region):
+            raise TypeError("region must be a Region.")
+        self.region = region
+        self.downloader = downloader or USGSCatalogDownloader()
+        self.storage = storage or ParquetCatalogStorage()
 
-    ``overlap`` intentionally re-fetches the trailing interval so revised source
-    events replace their older versions during deduplication.
-    """
-    destination = Path(path)
-    if not isinstance(end_time, datetime) or end_time.tzinfo is None:
-        raise ValueError("end_time must be a timezone-aware datetime.")
-    if not isinstance(overlap, timedelta) or overlap < timedelta(0):
-        raise ValueError("overlap must be a nonnegative timedelta.")
-    if destination.exists():
-        existing, _ = normalize_catalog(load_catalog(destination))
-        previous_count = len(existing)
-        if existing.empty and start_time is None:
-            raise ValueError("start_time is required when the existing catalog is empty.")
-        latest = existing["time"].max().to_pydatetime() if not existing.empty else start_time
-        query_start = latest - overlap  # type: ignore[operator]
-    else:
-        if start_time is None:
-            raise ValueError("start_time is required when creating a catalog.")
-        existing = pd.DataFrame()
-        previous_count = 0
-        query_start = start_time
-    if query_start.tzinfo is None:
-        raise ValueError("start_time must be timezone-aware.")
-    query_start = query_start.astimezone(timezone.utc)
-    query_end = end_time.astimezone(timezone.utc)
-    query = CatalogQuery(query_start, query_end, bounds, minimum_magnitude)
-    ingestion = HistoricalCatalogIngestor(client=client).ingest(query)  # type: ignore[arg-type]
-    downloaded = to_dataframe(ingestion)
-    combined = downloaded if existing.empty else pd.concat([existing, downloaded], ignore_index=True)
-    normalized, _ = normalize_catalog(combined)
-    deduplicated = deduplicate_catalog(normalized)
-    save_catalog(deduplicated.catalog, destination)
-    return CatalogUpdateResult(destination, previous_count, len(downloaded),
-                               deduplicated.duplicate_count, deduplicated.output_count,
-                               query_start, query_end)
+    def update(self, query: CatalogQuery) -> CatalogUpdateResult:
+        """Download, defensively filter, merge, then persist the complete catalog."""
+        existing = self.storage.load(self.region)
+        # Download and validate the entire response before any write is attempted.
+        downloaded = self.downloader.download(query)
+        filtered = tuple(event for event in downloaded if self.region.contains(event.latitude, event.longitude)
+                         and query.start_time <= event.time < query.end_time
+                         and (query.minimum_magnitude is None or event.magnitude is not None and event.magnitude >= query.minimum_magnitude))
+        merged = merge_events(existing, filtered)
+        self.storage.save(self.region, merged.events)
+        return CatalogUpdateResult(
+            merged.events, len(downloaded), len(existing), merged.inserted_count,
+            merged.updated_count, merged.unchanged_count, len(merged.events),
+        )
+
+
+def load_catalog(region: Region = PUERTO_RICO, *, storage: Storage | None = None,
+                 start=None, end=None) -> tuple[CatalogEvent, ...]:
+    """Convenience loader for a region's stored validated events."""
+    return (storage or ParquetCatalogStorage()).load(region, start=start, end=end)

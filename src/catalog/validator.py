@@ -1,116 +1,61 @@
-"""Deterministic validation and normalization of historical catalog frames."""
-
+"""Parsing and validation for USGS historical GeoJSON."""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Mapping
 
-import pandas as pd
-
-from src.catalog.export import CATALOG_COLUMNS
-
-REQUIRED_COLUMNS = ("event_id", "time", "latitude", "longitude", "depth", "magnitude")
-NUMERIC_COLUMNS = ("latitude", "longitude", "depth", "magnitude")
+from src.catalog.models import CatalogEvent
 
 
 class CatalogValidationError(ValueError):
-    """Raised when a catalog cannot be made analysis-ready."""
+    """Raised when source catalog data is malformed."""
 
 
-@dataclass(frozen=True, slots=True)
-class ValidationIssue:
-    row: object | None
-    field: str
-    message: str
+def _timestamp(value: object, field: str) -> datetime:
+    if isinstance(value, bool):
+        raise CatalogValidationError(f"{field} must be an epoch-millisecond number.")
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(float(value) / 1000, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError) as exc:
+            raise CatalogValidationError(f"{field} is outside the timestamp range.") from exc
+    raise CatalogValidationError(f"{field} must be an epoch-millisecond number.")
 
 
-@dataclass(frozen=True, slots=True)
-class CatalogValidationResult:
-    """Immutable validation summary; the normalized frame is returned separately."""
-
-    input_count: int
-    valid_count: int
-    invalid_count: int
-    issues: tuple[ValidationIssue, ...]
-
-    @property
-    def is_valid(self) -> bool:
-        return self.invalid_count == 0
-
-
-def validate_catalog(frame: pd.DataFrame) -> CatalogValidationResult:
-    """Validate required schema and values without mutating *frame*."""
-    normalized, result = normalize_catalog(frame, drop_invalid=True)
-    del normalized
-    return result
-
-
-def normalize_catalog(
-    frame: pd.DataFrame, *, drop_invalid: bool = False
-) -> tuple[pd.DataFrame, CatalogValidationResult]:
-    """Return a canonical copy and detailed validation result.
-
-    Rows are never silently removed unless ``drop_invalid=True``. Timestamps are
-    normalized to UTC, numeric fields are finite, and geographic/depth ranges
-    are enforced.
-    """
-    if not isinstance(frame, pd.DataFrame):
-        raise TypeError("frame must be a pandas DataFrame.")
-    missing = tuple(column for column in REQUIRED_COLUMNS if column not in frame.columns)
-    if missing:
-        raise CatalogValidationError(f"Catalog is missing required columns: {', '.join(missing)}")
-    output = frame.copy(deep=True)
-    issues: list[ValidationIssue] = []
-    bad_rows: set[object] = set()
-
-    def issue(index: object, field: str, message: str) -> None:
-        issues.append(ValidationIssue(index, field, message))
-        bad_rows.add(index)
-
-    identifiers = output["event_id"]
-    for index, value in identifiers.items():
-        if not isinstance(value, str) or not value.strip():
-            issue(index, "event_id", "must be a nonempty string")
-        else:
-            output.at[index, "event_id"] = value.strip()
-    parsed_time = pd.to_datetime(output["time"], utc=True, errors="coerce")
-    for index in output.index[parsed_time.isna()]:
-        issue(index, "time", "must be a valid timestamp")
-    output["time"] = parsed_time
-    if "updated_time" in output:
-        present = output["updated_time"].notna()
-        updated = pd.to_datetime(output["updated_time"], utc=True, errors="coerce")
-        for index in output.index[present & updated.isna()]:
-            issue(index, "updated_time", "must be a valid timestamp when present")
-        output["updated_time"] = updated
-    for column in NUMERIC_COLUMNS:
-        # pandas treats bool as numeric; reject it explicitly.
-        bool_mask = output[column].map(lambda value: isinstance(value, bool))
-        numeric = pd.to_numeric(output[column], errors="coerce")
-        finite = numeric.map(lambda value: pd.notna(value) and float("-inf") < float(value) < float("inf"))
-        for index in output.index[bool_mask | ~finite]:
-            issue(index, column, "must be a finite number, not boolean")
-        output[column] = numeric.astype(float)
-    ranges = {
-        "latitude": (-90.0, 90.0),
-        "longitude": (-180.0, 180.0),
-        "depth": (0.0, float("inf")),
-    }
-    for column, (minimum, maximum) in ranges.items():
-        mask = (output[column] < minimum) | (output[column] > maximum)
-        for index in output.index[mask.fillna(False)]:
-            issue(index, column, f"must be between {minimum:g} and {maximum:g}")
-    unique_issues = tuple(dict.fromkeys(issues))
-    result = CatalogValidationResult(len(frame), len(frame) - len(bad_rows), len(bad_rows), unique_issues)
-    if bad_rows and not drop_invalid:
-        first = unique_issues[0]
-        raise CatalogValidationError(
-            f"Catalog contains {len(bad_rows)} invalid row(s); row {first.row!r} "
-            f"field {first.field}: {first.message}."
+def parse_usgs_feature(feature: Mapping[str, Any]) -> CatalogEvent:
+    """Parse and validate one raw USGS GeoJSON feature."""
+    if not isinstance(feature, Mapping):
+        raise CatalogValidationError("USGS feature must be an object.")
+    properties = feature.get("properties")
+    geometry = feature.get("geometry")
+    if not isinstance(properties, Mapping) or not isinstance(geometry, Mapping):
+        raise CatalogValidationError("USGS feature requires properties and geometry objects.")
+    coordinates = geometry.get("coordinates")
+    if geometry.get("type") not in (None, "Point") or not isinstance(coordinates, (list, tuple)) or len(coordinates) < 3:
+        raise CatalogValidationError("USGS feature geometry must be a Point with three coordinates.")
+    event_id = feature.get("id") or properties.get("code")
+    if properties.get("time") is None:
+        raise CatalogValidationError("USGS feature requires properties.time.")
+    updated = properties.get("updated")
+    try:
+        return CatalogEvent(
+            event_id=event_id,
+            time=_timestamp(properties["time"], "time"),
+            longitude=coordinates[0], latitude=coordinates[1], depth=coordinates[2],
+            magnitude=properties.get("mag"), magnitude_type=properties.get("magType"),
+            place=properties.get("place"), status=properties.get("status"),
+            event_type=properties.get("type"), source=properties.get("net") or "USGS",
+            updated_at=_timestamp(updated, "updated") if updated is not None else None,
         )
-    if drop_invalid:
-        output = output.drop(index=list(bad_rows))
-    leading = [column for column in CATALOG_COLUMNS if column in output.columns]
-    trailing = [column for column in output.columns if column not in leading]
-    output = output.loc[:, leading + trailing].reset_index(drop=True)
-    return output, result
+    except (TypeError, ValueError) as exc:
+        raise CatalogValidationError(f"Invalid USGS feature {event_id!r}: {exc}") from exc
+
+
+def parse_usgs_feature_collection(payload: Mapping[str, Any]) -> tuple[CatalogEvent, ...]:
+    """Parse a GeoJSON FeatureCollection while preserving source order."""
+    if not isinstance(payload, Mapping) or payload.get("type") != "FeatureCollection":
+        raise CatalogValidationError("USGS response must be a GeoJSON FeatureCollection.")
+    features = payload.get("features")
+    if not isinstance(features, list):
+        raise CatalogValidationError("USGS FeatureCollection requires a features list.")
+    return tuple(parse_usgs_feature(feature) for feature in features)

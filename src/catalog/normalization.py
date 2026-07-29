@@ -60,7 +60,7 @@ def normalize_feature(feature: Any, *, source: str = "USGS") -> CatalogEvent:
         event_id=event_id.strip(), time=time, latitude=latitude, longitude=longitude,
         depth=depth, magnitude=magnitude, magnitude_type=_optional_text(properties.get("magType")),
         place=_optional_text(properties.get("place")), event_type=_optional_text(properties.get("type")),
-        source=source, updated_time=updated_time,
+        source=source, updated_at=updated_time,
     )
 
 
@@ -90,7 +90,11 @@ def filter_events(events: Iterable[CatalogEvent], query: CatalogQuery) -> list[C
         if query.start_time_utc <= event.time < query.end_time_utc
         and bounds.min_latitude <= event.latitude <= bounds.max_latitude
         and bounds.min_longitude <= event.longitude <= bounds.max_longitude
-        and (query.minimum_magnitude is None or event.magnitude >= query.minimum_magnitude)
+        and (
+            query.minimum_magnitude is None
+            or event.magnitude is not None
+            and event.magnitude >= query.minimum_magnitude
+        )
     ]
 
 

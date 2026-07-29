@@ -1,82 +1,106 @@
-"""Standard-library USGS downloader for reproducible catalog retrieval."""
+"""Paginated, retrying USGS historical catalog downloader."""
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
-from datetime import timedelta
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from src.catalog.models import CatalogQuery
+from src.catalog.deduplicator import merge_events
+from src.catalog.models import CatalogEvent, CatalogQuery
+from src.catalog.validator import CatalogValidationError, parse_usgs_feature_collection
 
 USGS_QUERY_URL = "https://earthquake.usgs.gov/fdsnws/event/1/query"
 
-
 class CatalogDownloadError(RuntimeError):
-    """Raised when the remote service cannot return a valid catalog."""
+    """Raised when USGS cannot be reached after configured retries."""
 
+class CatalogResponseError(CatalogDownloadError):
+    """Raised when USGS returns malformed catalog data."""
 
 @dataclass(frozen=True, slots=True)
-class CatalogDownloadResult:
-    features: tuple[dict[str, Any], ...]
-    request_count: int
+class DownloadConfiguration:
+    limit: int = 20_000
+    timeout_seconds: float = 60.0
+    max_retries: int = 3
+    backoff_seconds: float = 1.0
+
+    def __post_init__(self) -> None:
+        for name in ("limit", "max_retries"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{name} must be an integer, not boolean.")
+        for name in ("timeout_seconds", "backoff_seconds"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError(f"{name} must be numeric, not boolean.")
+        if not 1 <= self.limit <= 20_000:
+            raise ValueError("limit must be between 1 and the USGS maximum of 20000.")
+        if self.timeout_seconds <= 0 or self.max_retries < 0 or self.backoff_seconds < 0:
+            raise ValueError("timeout must be positive and retry/backoff values nonnegative.")
 
 
-class HistoricalCatalogDownloader:
-    """Download GeoJSON in deterministic, half-open time chunks."""
-
-    def __init__(self, *, base_url: str = USGS_QUERY_URL, timeout_seconds: float = 60.0,
-                 chunk_days: int = 30, opener: Callable[..., Any] = urlopen) -> None:
-        if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)):
-            raise TypeError("timeout_seconds must be numeric, not boolean.")
-        if timeout_seconds <= 0:
-            raise ValueError("timeout_seconds must be greater than zero.")
-        if isinstance(chunk_days, bool) or not isinstance(chunk_days, int):
-            raise TypeError("chunk_days must be an integer, not boolean.")
-        if chunk_days <= 0:
-            raise ValueError("chunk_days must be greater than zero.")
+class USGSCatalogDownloader:
+    def __init__(self, configuration: DownloadConfiguration | None = None, *,
+                 base_url: str = USGS_QUERY_URL, opener: Callable[..., Any] = urlopen,
+                 sleep: Callable[[float], None] = time.sleep) -> None:
+        self.configuration = configuration or DownloadConfiguration()
         self.base_url = base_url
-        self.timeout_seconds = float(timeout_seconds)
-        self.chunk_days = chunk_days
         self._opener = opener
+        self._sleep = sleep
 
-    def fetch(self, query: CatalogQuery) -> list[dict[str, Any]]:
-        return list(self.download(query).features)
-
-    def download(self, query: CatalogQuery) -> CatalogDownloadResult:
+    def download(self, query: CatalogQuery) -> tuple[CatalogEvent, ...]:
         if not isinstance(query, CatalogQuery):
             raise TypeError("query must be CatalogQuery.")
-        features: list[dict[str, Any]] = []
-        requests = 0
-        start = query.start_time_utc
-        while start < query.end_time_utc:
-            end = min(start + timedelta(days=self.chunk_days), query.end_time_utc)
-            features.extend(self._request(query, start, end))
-            requests += 1
-            start = end
-        return CatalogDownloadResult(tuple(features), requests)
+        offset = 1
+        collected: tuple[CatalogEvent, ...] = ()
+        while True:
+            page = self._page(query, offset)
+            collected = merge_events(collected, page).events
+            if len(page) < self.configuration.limit:
+                break
+            offset += self.configuration.limit
+        return collected
 
-    def _request(self, query: CatalogQuery, start: Any, end: Any) -> list[dict[str, Any]]:
+    def _page(self, query: CatalogQuery, offset: int) -> tuple[CatalogEvent, ...]:
         bounds = query.bounds
-        parameters: dict[str, str | float] = {
-            "format": "geojson", "starttime": start.isoformat(), "endtime": end.isoformat(),
-            "minlatitude": bounds.min_latitude, "maxlatitude": bounds.max_latitude,
-            "minlongitude": bounds.min_longitude, "maxlongitude": bounds.max_longitude,
-            "orderby": "time-asc",
+        params: dict[str, str | float | int] = {
+            "format": "geojson", "starttime": query.start_time.isoformat(),
+            "endtime": query.end_time.isoformat(), "minlatitude": bounds.min_latitude,
+            "maxlatitude": bounds.max_latitude, "minlongitude": bounds.min_longitude,
+            "maxlongitude": bounds.max_longitude, "orderby": "time-asc",
+            "limit": self.configuration.limit, "offset": offset,
         }
         if query.minimum_magnitude is not None:
-            parameters["minmagnitude"] = query.minimum_magnitude
-        request = Request(f"{self.base_url}?{urlencode(parameters)}", headers={"User-Agent": "project-athena/catalog-v1"})
-        try:
-            response = self._opener(request, timeout=self.timeout_seconds)
-            with response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, OSError, UnicodeError, json.JSONDecodeError) as exc:
-            raise CatalogDownloadError(f"Catalog request failed: {exc}") from exc
-        if not isinstance(payload, dict) or payload.get("type") != "FeatureCollection" or not isinstance(payload.get("features"), list):
-            raise CatalogDownloadError("Catalog response is not a GeoJSON FeatureCollection.")
-        if not all(isinstance(item, dict) for item in payload["features"]):
-            raise CatalogDownloadError("Catalog response contains a non-object feature.")
-        return payload["features"]
+            params["minmagnitude"] = query.minimum_magnitude
+        request = Request(f"{self.base_url}?{urlencode(params)}", headers={"User-Agent": "project-athena/catalog-v1"})
+        for attempt in range(self.configuration.max_retries + 1):
+            try:
+                response = self._opener(request, timeout=self.configuration.timeout_seconds)
+                raw = response.read()
+                close = getattr(response, "close", None)
+                if close is not None:
+                    close()
+                payload = json.loads(raw.decode("utf-8"))
+                return parse_usgs_feature_collection(payload)
+            except HTTPError as exc:
+                transient = exc.code == 429 or 500 <= exc.code < 600
+                if not transient:
+                    raise CatalogDownloadError(f"USGS request permanently failed with HTTP {exc.code}.") from exc
+                error: Exception = exc
+            except (URLError, TimeoutError, OSError) as exc:
+                error = exc
+            except (UnicodeError, json.JSONDecodeError, CatalogValidationError) as exc:
+                raise CatalogResponseError(f"USGS returned a malformed response: {exc}") from exc
+            if attempt == self.configuration.max_retries:
+                raise CatalogDownloadError(f"USGS request failed after {attempt + 1} attempt(s): {error}") from error
+            self._sleep(self.configuration.backoff_seconds * (2 ** attempt))
+        raise AssertionError("unreachable")
+
+
+# Compatibility aliases/wrapper.
+CatalogDownloadResult = tuple[CatalogEvent, ...]
+HistoricalCatalogDownloader = USGSCatalogDownloader

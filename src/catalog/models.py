@@ -1,5 +1,4 @@
-"""Immutable models used by the historical catalog ingestion pipeline."""
-
+"""Immutable, validated models for historical catalogs."""
 from __future__ import annotations
 
 import math
@@ -8,108 +7,156 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+def _number(value: object, name: str, *, nullable: bool = False) -> float | None:
+    if value is None and nullable:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"{name} must be numeric, not boolean.")
+    result = float(value)
+    if not math.isfinite(result):
+        raise ValueError(f"{name} must be finite.")
+    return result
+
+
+def _utc(value: object, name: str, *, nullable: bool = False) -> datetime | None:
+    if value is None and nullable:
+        return None
+    if not isinstance(value, datetime):
+        raise TypeError(f"{name} must be a datetime.")
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{name} must be timezone-aware.")
+    return value.astimezone(timezone.utc)
+
+
+def _text(value: object, name: str, *, nullable: bool = False) -> str | None:
+    if value is None and nullable:
+        return None
+    if not isinstance(value, str):
+        raise TypeError(f"{name} must be a string.")
+    result = value.strip()
+    if not result and not nullable:
+        raise ValueError(f"{name} must be a nonempty string.")
+    return result or None
+
+
 @dataclass(frozen=True, slots=True)
 class GeographicBounds:
-    """A validated rectangular geographic query area."""
-
     min_latitude: float
     max_latitude: float
     min_longitude: float
     max_longitude: float
 
     def __post_init__(self) -> None:
-        values = (
-            self.min_latitude,
-            self.max_latitude,
-            self.min_longitude,
-            self.max_longitude,
-        )
-        if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in values):
-            raise TypeError("Geographic bounds must be numeric, not boolean.")
-        if not all(math.isfinite(float(value)) for value in values):
-            raise ValueError("Geographic bounds must be finite.")
-        if not -90 <= self.min_latitude <= 90 or not -90 <= self.max_latitude <= 90:
-            raise ValueError("Latitude bounds must be between -90 and 90.")
-        if not -180 <= self.min_longitude <= 180 or not -180 <= self.max_longitude <= 180:
-            raise ValueError("Longitude bounds must be between -180 and 180.")
-        if self.min_latitude >= self.max_latitude:
-            raise ValueError("min_latitude must be less than max_latitude.")
-        if self.min_longitude >= self.max_longitude:
-            raise ValueError("min_longitude must be less than max_longitude.")
+        for name in ("min_latitude", "max_latitude", "min_longitude", "max_longitude"):
+            object.__setattr__(self, name, _number(getattr(self, name), name))
+        if not -90 <= self.min_latitude < self.max_latitude <= 90:
+            raise ValueError("Latitude bounds must be ordered between -90 and 90.")
+        if not -180 <= self.min_longitude < self.max_longitude <= 180:
+            raise ValueError("Longitude bounds must be ordered between -180 and 180.")
+
+    def contains(self, latitude: float, longitude: float) -> bool:
+        lat = _number(latitude, "latitude")
+        lon = _number(longitude, "longitude")
+        return self.min_latitude <= lat <= self.max_latitude and self.min_longitude <= lon <= self.max_longitude
 
 
 @dataclass(frozen=True, slots=True)
 class CatalogQuery:
-    """Parameters for retrieving one historical catalog slice."""
-
     start_time: datetime
     end_time: datetime
     bounds: GeographicBounds
     minimum_magnitude: float | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.start_time, datetime) or not isinstance(self.end_time, datetime):
-            raise TypeError("start_time and end_time must be datetime values.")
+        object.__setattr__(self, "start_time", _utc(self.start_time, "start_time"))
+        object.__setattr__(self, "end_time", _utc(self.end_time, "end_time"))
         if not isinstance(self.bounds, GeographicBounds):
             raise TypeError("bounds must be GeographicBounds.")
-        for name, value in (("start_time", self.start_time), ("end_time", self.end_time)):
-            if value.tzinfo is None or value.utcoffset() is None:
-                raise ValueError(f"{name} must be timezone-aware.")
         if self.start_time >= self.end_time:
             raise ValueError("start_time must be earlier than end_time.")
-        if self.minimum_magnitude is not None:
-            if isinstance(self.minimum_magnitude, bool) or not isinstance(
-                self.minimum_magnitude, (int, float)
-            ):
-                raise TypeError("minimum_magnitude must be numeric, not boolean.")
-            if not math.isfinite(float(self.minimum_magnitude)):
-                raise ValueError("minimum_magnitude must be finite.")
-            if self.minimum_magnitude < -2:
-                raise ValueError("minimum_magnitude cannot be less than -2.")
+        value = _number(self.minimum_magnitude, "minimum_magnitude", nullable=True)
+        if value is not None and value < -2:
+            raise ValueError("minimum_magnitude cannot be less than -2.")
+        object.__setattr__(self, "minimum_magnitude", value)
 
     @property
     def start_time_utc(self) -> datetime:
-        """Return the start time normalized to UTC."""
-        return self.start_time.astimezone(timezone.utc)
+        return self.start_time
 
     @property
     def end_time_utc(self) -> datetime:
-        """Return the end time normalized to UTC."""
-        return self.end_time.astimezone(timezone.utc)
+        return self.end_time
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class CatalogEvent:
-    """One normalized, analysis-ready seismic catalog record."""
-
     event_id: str
     time: datetime
     latitude: float
     longitude: float
     depth: float
-    magnitude: float
+    magnitude: float | None
     magnitude_type: str | None
     place: str | None
+    status: str | None
     event_type: str | None
     source: str
-    updated_time: datetime | None
+    updated_at: datetime | None
+
+    def __init__(self, event_id: str, time: datetime, latitude: float, longitude: float,
+                 depth: float, magnitude: float | None, magnitude_type: str | None = None,
+                 place: str | None = None, event_type: str | None = None, source: str = "USGS",
+                 updated_at: datetime | None = None, status: str | None = None,
+                 updated_time: datetime | None = None) -> None:
+        if updated_at is not None and updated_time is not None and updated_at != updated_time:
+            raise ValueError("updated_at and updated_time disagree.")
+        values = {
+            "event_id": _text(event_id, "event_id"),
+            "time": _utc(time, "time"),
+            "latitude": _number(latitude, "latitude"),
+            "longitude": _number(longitude, "longitude"),
+            "depth": _number(depth, "depth"),
+            "magnitude": _number(magnitude, "magnitude", nullable=True),
+            "magnitude_type": _text(magnitude_type, "magnitude_type", nullable=True),
+            "place": _text(place, "place", nullable=True),
+            "status": _text(status, "status", nullable=True),
+            "event_type": _text(event_type, "event_type", nullable=True),
+            "source": _text(source, "source"),
+            "updated_at": _utc(updated_at if updated_at is not None else updated_time, "updated_at", nullable=True),
+        }
+        if not -90 <= values["latitude"] <= 90:
+            raise ValueError("latitude must be between -90 and 90.")
+        if not -180 <= values["longitude"] <= 180:
+            raise ValueError("longitude must be between -180 and 180.")
+        if values["depth"] < 0:
+            raise ValueError("depth must be nonnegative.")
+        for name, value in values.items():
+            object.__setattr__(self, name, value)
+
+    @property
+    def updated_time(self) -> datetime | None:
+        """Backward-compatible alias for ``updated_at``."""
+        return self.updated_at
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation with UTC timestamps."""
-        record = asdict(self)
-        record["time"] = self.time.astimezone(timezone.utc).isoformat()
-        record["updated_time"] = (
-            self.updated_time.astimezone(timezone.utc).isoformat()
-            if self.updated_time is not None
-            else None
-        )
-        return record
+        return {
+            "event_id": self.event_id,
+            "time": self.time.isoformat(),
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "depth": self.depth,
+            "magnitude": self.magnitude,
+            "magnitude_type": self.magnitude_type,
+            "place": self.place,
+            "status": self.status,
+            "event_type": self.event_type,
+            "source": self.source,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
 
 
 @dataclass(frozen=True, slots=True)
 class IngestionSummary:
-    """Immutable quality and retrieval summary for a catalog ingestion."""
-
     requested_count: int
     accepted_count: int
     excluded_incomplete_count: int
@@ -123,7 +170,6 @@ class IngestionSummary:
     source: str
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable summary."""
         result = asdict(self)
         result["start_time"] = self.start_time.astimezone(timezone.utc).isoformat()
         result["end_time"] = self.end_time.astimezone(timezone.utc).isoformat()
@@ -132,11 +178,8 @@ class IngestionSummary:
 
 @dataclass(frozen=True, slots=True)
 class CatalogIngestionResult:
-    """Immutable deterministic output of a historical catalog ingestion."""
-
     events: tuple[CatalogEvent, ...]
     summary: IngestionSummary
 
     def records(self) -> tuple[dict[str, Any], ...]:
-        """Return JSON-serializable event records in deterministic order."""
         return tuple(event.to_dict() for event in self.events)
