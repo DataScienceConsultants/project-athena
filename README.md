@@ -381,3 +381,17 @@ describes movement in historical anomaly scores. Recent periods are the latest c
 number of chronological periods. None of these outputs predicts a future earthquake.
 
 > Project Athena reports describe historical seismic observations and analytical anomaly behavior. They are descriptive and nonpredictive. They do not predict earthquakes, estimate future earthquake probability, determine imminent danger, or replace official earthquake, tsunami, or emergency-management information.
+
+## Descriptive intelligence v1
+
+`src.intelligence` provides a small, independent interpretation layer over an
+`ObservatoryTimeSeriesResult`; it does not replace the unified report in
+`src.observatory.intelligence`. The activity index is the mean of up to seven recent
+available anomaly scores on their existing 0--100 scale. Trend compares the first
+and last score in the recent trend window, with changes of five points or less
+classified as stable. Confidence combines the number of scored periods with the
+fraction of candidate periods that could be scored. Missing periods are excluded
+from the index and reduce confidence.
+
+All intelligence-v1 output is descriptive. It is not earthquake prediction, a
+forecast, or an official warning.
