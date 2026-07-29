@@ -209,6 +209,30 @@ For tests or offline ingestion, pass a client object with a `fetch(query)` metho
 that returns USGS GeoJSON features. The pipeline itself makes no assumptions
 about a particular location and does not make predictive claims.
 
+Catalog Engine v1 also provides version-controlled region lookup, strict
+DataFrame validation, deterministic source/event deduplication, atomic CSV and
+Parquet storage, standard-library HTTP downloads in bounded time chunks, and
+incremental updates with a configurable overlap for revised events:
+
+```python
+from datetime import datetime, timezone
+
+from src.catalog import get_region, update_catalog
+
+region = get_region()
+result = update_catalog(
+    "data/processed/puerto_rico.parquet",
+    start_time=datetime(2020, 1, 1, tzinfo=timezone.utc),
+    end_time=datetime.now(timezone.utc),
+    bounds=region.bounds,
+    minimum_magnitude=region.default_minimum_magnitude,
+)
+print(result.final_count)
+```
+
+Updates describe and preserve observed historical events only. They do not
+forecast earthquakes or make predictive claims.
+
 ## Historical activity baselines
 
 `src.baseline` provides deterministic descriptive baselines across UTC calendar

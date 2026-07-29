@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -17,6 +18,16 @@ class GeographicBounds:
     max_longitude: float
 
     def __post_init__(self) -> None:
+        values = (
+            self.min_latitude,
+            self.max_latitude,
+            self.min_longitude,
+            self.max_longitude,
+        )
+        if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in values):
+            raise TypeError("Geographic bounds must be numeric, not boolean.")
+        if not all(math.isfinite(float(value)) for value in values):
+            raise ValueError("Geographic bounds must be finite.")
         if not -90 <= self.min_latitude <= 90 or not -90 <= self.max_latitude <= 90:
             raise ValueError("Latitude bounds must be between -90 and 90.")
         if not -180 <= self.min_longitude <= 180 or not -180 <= self.max_longitude <= 180:
@@ -37,13 +48,24 @@ class CatalogQuery:
     minimum_magnitude: float | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.start_time, datetime) or not isinstance(self.end_time, datetime):
+            raise TypeError("start_time and end_time must be datetime values.")
+        if not isinstance(self.bounds, GeographicBounds):
+            raise TypeError("bounds must be GeographicBounds.")
         for name, value in (("start_time", self.start_time), ("end_time", self.end_time)):
             if value.tzinfo is None or value.utcoffset() is None:
                 raise ValueError(f"{name} must be timezone-aware.")
         if self.start_time >= self.end_time:
             raise ValueError("start_time must be earlier than end_time.")
-        if self.minimum_magnitude is not None and self.minimum_magnitude < -2:
-            raise ValueError("minimum_magnitude cannot be less than -2.")
+        if self.minimum_magnitude is not None:
+            if isinstance(self.minimum_magnitude, bool) or not isinstance(
+                self.minimum_magnitude, (int, float)
+            ):
+                raise TypeError("minimum_magnitude must be numeric, not boolean.")
+            if not math.isfinite(float(self.minimum_magnitude)):
+                raise ValueError("minimum_magnitude must be finite.")
+            if self.minimum_magnitude < -2:
+                raise ValueError("minimum_magnitude cannot be less than -2.")
 
     @property
     def start_time_utc(self) -> datetime:
