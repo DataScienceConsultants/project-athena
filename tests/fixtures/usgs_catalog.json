@@ -1,0 +1,7 @@
+{"type":"FeatureCollection","features":[
+ {"id":"same","properties":{"time":1577836800000,"updated":1577836801000,"mag":0,"magType":"md","place":"A","type":"earthquake"},"geometry":{"coordinates":[-66,18,0]}},
+ {"id":"same","properties":{"time":1577836800000,"updated":1577836802000,"mag":1.5,"magType":"md","place":"new","type":"earthquake"},"geometry":{"coordinates":[-66,18,2]}},
+ {"id":"later","properties":{"time":1577923200000,"updated":1577923200000,"mag":2,"type":"earthquake"},"geometry":{"coordinates":[-65,19,3]}},
+ {"id":"missing","properties":{"time":1577923200000,"mag":null},"geometry":{"coordinates":[-65,19,3]}},
+ {"id":"bad","properties":{"time":"not-a-time","mag":2},"geometry":{"coordinates":[-65,19,3]}}
+]}

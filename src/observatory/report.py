@@ -295,6 +295,14 @@ def parse_arguments() -> argparse.Namespace:
         )
     )
 
+    parser.add_argument("--intelligence", action="store_true", help="Build the unified intelligence report.")
+    parser.add_argument("--frequency", choices=("daily", "weekly", "monthly"), default="daily")
+    parser.add_argument("--baseline-lookback", type=int, default=30)
+    parser.add_argument("--minimum-baseline-periods", type=int, default=7)
+    parser.add_argument("--recent-periods", type=int, default=10)
+    parser.add_argument("--exclude-unavailable-periods", action="store_true")
+    parser.add_argument("--omit-time-series-points", action="store_true")
+
     parser.add_argument(
         "--catalog",
         type=Path,
@@ -345,11 +353,21 @@ def main() -> None:
     arguments = parse_arguments()
 
     try:
-        run_report(
-            catalog_path=arguments.catalog,
-            region_key=arguments.region,
-            output_path=arguments.output,
-        )
+        if arguments.intelligence:
+            from src.observatory.models import ObservatoryIntelligenceConfiguration
+            from src.timeseries import TimeSeriesConfiguration, TimeSeriesFrequency
+            configuration = ObservatoryIntelligenceConfiguration(
+                time_series_configuration=TimeSeriesConfiguration(
+                    frequency=TimeSeriesFrequency(arguments.frequency),
+                    baseline_lookback_periods=arguments.baseline_lookback,
+                    minimum_baseline_periods=arguments.minimum_baseline_periods,
+                ), recent_period_limit=arguments.recent_periods,
+                include_unavailable_periods=not arguments.exclude_unavailable_periods,
+                include_time_series_points=not arguments.omit_time_series_points,
+            )
+            run_intelligence_report(catalog_path=arguments.catalog, region_key=arguments.region, output_path=arguments.output, configuration=configuration)
+        else:
+            run_report(catalog_path=arguments.catalog, region_key=arguments.region, output_path=arguments.output)
     except (
         FileNotFoundError,
         OSError,
@@ -456,6 +474,82 @@ def _display_path(path: str | Path) -> str:
         )
     except ValueError:
         return str(selected_path)
+
+INTELLIGENCE_REPORT_FILENAME = "latest_observatory_intelligence_report.json"
+
+
+def save_intelligence_report_json(report: Any, output_path: str | Path) -> Path:
+    """Save a unified intelligence report as deterministic formatted JSON."""
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as output_file:
+        json.dump(report.to_dict(), output_file, indent=2, ensure_ascii=False, allow_nan=False)
+        output_file.write("\n")
+    return path
+
+
+def render_intelligence_terminal_report(report: Any) -> str:
+    """Render legacy Observatory content followed by focused intelligence sections."""
+    legacy = render_terminal_report(report.observatory).splitlines()
+    # Keep the legacy section content while replacing its closing disclaimer/footer.
+    body = legacy[:-2]
+    snapshot = report.snapshot
+    anomaly = snapshot.latest_anomaly
+    trend = report.time_series.trend
+    score = "Unavailable" if anomaly is None or anomaly.score is None else f"{anomaly.score:.2f}"
+    level = "Unavailable" if anomaly is None else anomaly.level.value.replace("_", " ").title()
+    contributor = "Unavailable" if anomaly is None else (_strongest_contributor(anomaly) or "Unavailable")
+    lines = ["=" * LINE_WIDTH, "PROJECT ATHENA SEISMIC OBSERVATORY INTELLIGENCE REPORT", "=" * LINE_WIDTH]
+    lines.extend(body[3:])
+    lines += ["", "LATEST ANALYTICAL SNAPSHOT", "-" * LINE_WIDTH,
+              _row("Period", _period(snapshot.latest_period_start, snapshot.latest_period_end)),
+              _row("Observed events", _value(snapshot.latest_current_event_count)),
+              _row("Historical baseline", _period(snapshot.latest_baseline_start, snapshot.latest_baseline_end)),
+              _row("Anomaly score", score), _row("Anomaly level", level),
+              _row("Strongest contributor", contributor),
+              "", "TEMPORAL ANOMALY TREND", "-" * LINE_WIDTH,
+              _row("Direction", trend.direction.value.replace("_", " ").title()),
+              _row("Strength", trend.strength.value.replace("_", " ").title()),
+              _row("Scored periods", str(report.time_series.available_period_count)),
+              _row("Unavailable periods", str(report.time_series.unavailable_period_count)),
+              f"Interpretation: {trend.summary}", "", "RECENT PERIODS", "-" * LINE_WIDTH,
+              "Period       Events  Score        Level          Available"]
+    for point in report.recent_periods:
+        available = point.anomaly is not None
+        point_score = "Unavailable" if not available or point.anomaly.score is None else f"{point.anomaly.score:.1f}"
+        point_level = "Unavailable" if not available else point.anomaly.level.value.title()
+        lines.append(f"{point.period_start:%Y-%m-%d}  {point.current_event_count:<6}  {point_score:<11}  {point_level:<13}  {'Yes' if available else 'No'}")
+    if not report.recent_periods:
+        lines.append("Unavailable")
+    lines += ["", "EXECUTIVE SUMMARY", "-" * LINE_WIDTH, report.executive_summary,
+              "", "DISCLAIMER", "-" * LINE_WIDTH, report.disclaimer, "=" * LINE_WIDTH]
+    return "\n".join(lines)
+
+
+def _period(start: Any, end: Any) -> str:
+    if start is None or end is None:
+        return "Unavailable"
+    return f"{start:%Y-%m-%d} to {end:%Y-%m-%d} UTC"
+
+
+def _value(value: Any) -> str:
+    return "Unavailable" if value is None else str(value)
+
+
+def _strongest_contributor(anomaly: Any) -> str | None:
+    scores = [item for item in anomaly.metric_scores.values() if item.weighted_score is not None]
+    return (max(scores, key=lambda item: item.weighted_score).metric_name.replace("_", " ").title() if scores else None)
+
+
+def run_intelligence_report(*, catalog_path: str | Path | None = None, region_key: str | None = None, output_path: str | Path | None = None, configuration: Any = None) -> tuple[Any, Path]:
+    """Build, save, and print the unified intelligence report."""
+    from src.observatory.intelligence import build_observatory_intelligence_report
+    report = build_observatory_intelligence_report(catalog_path, region_key=region_key, configuration=configuration)
+    selected = Path(output_path) if output_path is not None else DEFAULT_OUTPUT_DIRECTORY / INTELLIGENCE_REPORT_FILENAME
+    saved = save_intelligence_report_json(report, selected)
+    print(render_intelligence_terminal_report(report))
+    print(f"\nJSON report saved to: {_display_path(saved)}")
+    return report, saved
 
 
 if __name__ == "__main__":
