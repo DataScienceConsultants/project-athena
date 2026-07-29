@@ -1,4 +1,5 @@
 """Public Project Athena Observatory APIs."""
+
 from src.observatory.builder import build_observatory_report
 from src.observatory.intelligence import build_observatory_intelligence_report
 from src.observatory.models import (
@@ -17,9 +18,16 @@ from src.observatory.report import (
 )
 
 __all__ = [
-    "ObservatoryReport", "build_observatory_report", "render_terminal_report",
-    "save_report_json", "run_report", "ObservatoryIntelligenceConfiguration",
-    "ObservatoryIntelligenceSnapshot", "ObservatoryIntelligenceReport",
-    "build_observatory_intelligence_report", "render_intelligence_terminal_report",
-    "save_intelligence_report_json", "run_intelligence_report",
+    "ObservatoryReport",
+    "build_observatory_report",
+    "render_terminal_report",
+    "save_report_json",
+    "run_report",
+    "ObservatoryIntelligenceConfiguration",
+    "ObservatoryIntelligenceSnapshot",
+    "ObservatoryIntelligenceReport",
+    "build_observatory_intelligence_report",
+    "render_intelligence_terminal_report",
+    "save_intelligence_report_json",
+    "run_intelligence_report",
 ]

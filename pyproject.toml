@@ -1,9 +1,19 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
 [project]
 name = "project-athena"
-version = "0.4.0"
+version = "0.4.1"
 description = "Experimental seismic intelligence and observatory platform."
 readme = "README.md"
 requires-python = ">=3.12"
+dependencies = [
+    "pandas>=2.2,<3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -44,8 +54,6 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-# Start with high-confidence correctness rules so CI can be introduced
-# without forcing a large unrelated formatting refactor.
 select = [
     "E9",
     "F63",
