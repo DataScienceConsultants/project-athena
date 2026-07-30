@@ -232,6 +232,35 @@ print(result.final_count)
 Updates describe and preserve observed historical events only. They do not
 forecast earthquakes or make predictive claims.
 
+### Build an Observatory report from canonical catalog storage
+
+Canonical Historical Catalog Engine storage can feed the existing Observatory
+without a second validation or metrics pipeline. Save validated events with the
+catalog storage API, then identify the region explicitly when building the
+report (the region is never inferred from a filename):
+
+```python
+from src.catalog import CatalogUpdater, ParquetCatalogStorage, get_region
+from src.observatory import (
+    build_observatory_report_from_catalog_storage,
+    render_terminal_report,
+)
+
+region = get_region("puerto_rico")
+storage = ParquetCatalogStorage("data/processed")
+update = CatalogUpdater(region, storage=storage).update(query)
+
+report = build_observatory_report_from_catalog_storage(
+    "data/processed",
+    region_key="puerto_rico",
+)
+print(render_terminal_report(report))
+# The immutable report can also be serialized with report.to_dict().
+```
+
+Athena provides experimental seismic analysis and is not an official
+earthquake prediction, warning, or emergency-alert system.
+
 ## Historical activity baselines
 
 `src.baseline` provides deterministic descriptive baselines across UTC calendar

@@ -1,6 +1,13 @@
 """Public Project Athena Observatory APIs."""
 
-from src.observatory.builder import build_observatory_report
+from src.observatory.builder import (
+    build_observatory_report,
+    build_observatory_report_from_dataframe,
+)
+from src.observatory.catalog_adapter import (
+    build_observatory_report_from_catalog_storage,
+    catalog_events_to_observatory_dataframe,
+)
 from src.observatory.intelligence import build_observatory_intelligence_report
 from src.observatory.models import (
     ObservatoryIntelligenceConfiguration,
@@ -20,6 +27,9 @@ from src.observatory.report import (
 __all__ = [
     "ObservatoryReport",
     "build_observatory_report",
+    "build_observatory_report_from_dataframe",
+    "build_observatory_report_from_catalog_storage",
+    "catalog_events_to_observatory_dataframe",
     "render_terminal_report",
     "save_report_json",
     "run_report",
