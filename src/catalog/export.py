@@ -16,7 +16,12 @@ CATALOG_COLUMNS = (
 
 def to_dataframe(result: CatalogIngestionResult) -> pd.DataFrame:
     """Convert an immutable result to a typed DataFrame with Athena columns."""
-    dataframe = pd.DataFrame.from_records(result.records(), columns=CATALOG_COLUMNS)
+    records = []
+    for event in result.events:
+        record = event.to_dict()
+        record["updated_time"] = record.pop("updated_at")
+        records.append(record)
+    dataframe = pd.DataFrame.from_records(records, columns=CATALOG_COLUMNS)
     if dataframe.empty:
         return dataframe
     dataframe["time"] = pd.to_datetime(dataframe["time"], utc=True)
