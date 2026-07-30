@@ -1,8 +1,17 @@
 # Project Athena
 
+[![CI](https://github.com/DataScienceConsultants/project-athena/actions/workflows/ci.yml/badge.svg)](https://github.com/DataScienceConsultants/project-athena/actions/workflows/ci.yml)
+
 **Experimental seismic intelligence and probabilistic earthquake forecasting for Puerto Rico**
 
 Project Athena is an open-source research platform that analyzes historical and near-real-time earthquake data for Puerto Rico and the surrounding Caribbean region.
+
+## Continuous integration
+
+GitHub Actions validates every pull request to `main` and every push to `main`.
+The CI workflow installs Athena with its development dependencies, runs linting
+and the complete test suite with coverage reporting, and verifies that the source
+tree compiles successfully.
 
 Athena is designed to:
 
