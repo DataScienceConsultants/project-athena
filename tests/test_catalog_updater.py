@@ -29,3 +29,17 @@ def test_failed_download_never_overwrites():
 def test_load_catalog_convenience_uses_injected_storage():
     storage=MemoryStorage((event("x"),))
     assert load_catalog(PUERTO_RICO,storage=storage)[0].event_id=="x"
+
+
+def test_update_rejects_query_bounds_that_do_not_match_region():
+    mismatched = CatalogQuery(
+        NOW - timedelta(1),
+        NOW + timedelta(1),
+        GeographicBounds(10, 11, -69, -63),
+    )
+    storage = MemoryStorage()
+    with pytest.raises(ValueError, match="must match"):
+        CatalogUpdater(PUERTO_RICO, downloader=Downloader(), storage=storage).update(
+            mismatched
+        )
+    assert storage.saved == 0

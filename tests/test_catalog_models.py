@@ -18,10 +18,14 @@ def test_event_normalizes_and_serializes_stably():
 def test_updated_time_compatibility_alias():
     assert event(updated_at=None, updated_time=NOW).updated_at == NOW
 
+
+def test_negative_depth_is_accepted():
+    assert event(depth=-2.5).depth == -2.5
+
 def test_event_is_frozen():
     with pytest.raises(FrozenInstanceError): event().depth = 2
 
-@pytest.mark.parametrize(("field", "value"), [("latitude", True), ("longitude", float("inf")), ("depth", -1), ("magnitude", float("nan")), ("time", datetime(2024, 1, 1)), ("event_id", " ")])
+@pytest.mark.parametrize(("field", "value"), [("latitude", True), ("longitude", float("inf")), ("depth", float("inf")), ("magnitude", float("nan")), ("time", datetime(2024, 1, 1)), ("event_id", " ")])
 def test_event_rejects_invalid_values(field, value):
     with pytest.raises((TypeError, ValueError)): event(**{field: value})
 

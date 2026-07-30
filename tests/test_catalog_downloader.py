@@ -38,3 +38,24 @@ def test_permanent_4xx_does_not_retry():
 
 def test_malformed_response_has_specific_error():
     with pytest.raises(CatalogResponseError): USGSCatalogDownloader(opener=lambda *a,**k:Response({})).download(QUERY)
+
+
+def test_repeated_full_page_stops_endless_pagination():
+    payload = {"type": "FeatureCollection", "features": [feature(1)]}
+    downloader = USGSCatalogDownloader(
+        DownloadConfiguration(limit=1), opener=lambda *args, **kwargs: Response(payload)
+    )
+    with pytest.raises(CatalogResponseError, match="repeated"):
+        downloader.download(QUERY)
+
+
+def test_maximum_page_count_stops_endless_pagination():
+    counter = iter(range(1, 10))
+    downloader = USGSCatalogDownloader(
+        DownloadConfiguration(limit=1, max_pages=2),
+        opener=lambda *args, **kwargs: Response(
+            {"type": "FeatureCollection", "features": [feature(next(counter))]}
+        ),
+    )
+    with pytest.raises(CatalogResponseError, match="maximum"):
+        downloader.download(QUERY)

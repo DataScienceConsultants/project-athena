@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 from uuid import uuid4
@@ -12,6 +13,16 @@ from src.catalog.models import CatalogEvent
 from src.catalog.regions import Region, get_region
 
 EVENT_COLUMNS = ("event_id", "time", "latitude", "longitude", "depth", "magnitude", "magnitude_type", "place", "status", "event_type", "source", "updated_at")
+
+
+def _utc_filter(value: datetime | None, name: str) -> datetime | None:
+    if value is None:
+        return None
+    if not isinstance(value, datetime):
+        raise TypeError(f"{name} must be a datetime when provided.")
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{name} must be timezone-aware.")
+    return value.astimezone(timezone.utc)
 
 
 def frame_from_events(events: Iterable[CatalogEvent]) -> pd.DataFrame:
@@ -45,7 +56,17 @@ class ParquetCatalogStorage:
             raise TypeError("region must be a Region or region key.")
         return self.root / f"{selected.key}.parquet"
 
-    def load(self, region: Region | str, *, start=None, end=None) -> tuple[CatalogEvent, ...]:
+    def load(
+        self,
+        region: Region | str,
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> tuple[CatalogEvent, ...]:
+        start = _utc_filter(start, "start")
+        end = _utc_filter(end, "end")
+        if start is not None and end is not None and start >= end:
+            raise ValueError("start must be earlier than end.")
         path = self.path_for_region(region)
         if not path.exists():
             return ()
@@ -61,6 +82,9 @@ class ParquetCatalogStorage:
         validated = tuple(events)
         if not all(isinstance(event, CatalogEvent) for event in validated):
             raise TypeError("events must contain CatalogEvent objects.")
+        validated = tuple(
+            sorted(validated, key=lambda event: (event.time, event.event_id, event.source))
+        )
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp.parquet")
         try:

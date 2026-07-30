@@ -128,8 +128,6 @@ class CatalogEvent:
             raise ValueError("latitude must be between -90 and 90.")
         if not -180 <= values["longitude"] <= 180:
             raise ValueError("longitude must be between -180 and 180.")
-        if values["depth"] < 0:
-            raise ValueError("depth must be nonnegative.")
         for name, value in values.items():
             object.__setattr__(self, name, value)
 

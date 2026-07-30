@@ -27,9 +27,10 @@ class DownloadConfiguration:
     timeout_seconds: float = 60.0
     max_retries: int = 3
     backoff_seconds: float = 1.0
+    max_pages: int = 10_000
 
     def __post_init__(self) -> None:
-        for name in ("limit", "max_retries"):
+        for name in ("limit", "max_retries", "max_pages"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int):
                 raise TypeError(f"{name} must be an integer, not boolean.")
@@ -41,6 +42,8 @@ class DownloadConfiguration:
             raise ValueError("limit must be between 1 and the USGS maximum of 20000.")
         if self.timeout_seconds <= 0 or self.max_retries < 0 or self.backoff_seconds < 0:
             raise ValueError("timeout must be positive and retry/backoff values nonnegative.")
+        if self.max_pages <= 0:
+            raise ValueError("max_pages must be greater than zero.")
 
 
 class USGSCatalogDownloader:
@@ -57,13 +60,21 @@ class USGSCatalogDownloader:
             raise TypeError("query must be CatalogQuery.")
         offset = 1
         collected: tuple[CatalogEvent, ...] = ()
-        while True:
+        page_signatures: set[tuple[CatalogEvent, ...]] = set()
+        for _ in range(self.configuration.max_pages):
             page = self._page(query, offset)
+            if page in page_signatures:
+                raise CatalogResponseError(
+                    "USGS pagination repeated a page and cannot safely progress."
+                )
+            page_signatures.add(page)
             collected = merge_events(collected, page).events
             if len(page) < self.configuration.limit:
-                break
+                return collected
             offset += self.configuration.limit
-        return collected
+        raise CatalogResponseError(
+            f"USGS pagination exceeded the maximum of {self.configuration.max_pages} pages."
+        )
 
     def _page(self, query: CatalogQuery, offset: int) -> tuple[CatalogEvent, ...]:
         bounds = query.bounds

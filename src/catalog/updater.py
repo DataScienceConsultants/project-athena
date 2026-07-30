@@ -40,6 +40,12 @@ class CatalogUpdater:
 
     def update(self, query: CatalogQuery) -> CatalogUpdateResult:
         """Download, defensively filter, merge, then persist the complete catalog."""
+        if not isinstance(query, CatalogQuery):
+            raise TypeError("query must be CatalogQuery.")
+        if query.bounds != self.region.bounds:
+            raise ValueError(
+                f"query bounds must match the {self.region.key!r} region bounds."
+            )
         existing = self.storage.load(self.region)
         # Download and validate the entire response before any write is attempted.
         downloaded = self.downloader.download(query)
