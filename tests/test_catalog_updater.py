@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import pytest
-from src.catalog import CatalogEvent, CatalogQuery, CatalogUpdater, GeographicBounds, PUERTO_RICO, load_catalog
+from src.catalog import CARIBBEAN, CatalogEvent, CatalogQuery, CatalogUpdater, PUERTO_RICO, load_catalog
 NOW=datetime(2024,1,1,tzinfo=timezone.utc)
 def event(i,lat=18,updated=NOW): return CatalogEvent(i,NOW,lat,-66,5,1,updated_at=updated)
 class MemoryStorage:
@@ -12,7 +12,7 @@ class Downloader:
     def download(self,query):
         if self.error: raise self.error
         return self.events
-QUERY=CatalogQuery(NOW-timedelta(1),NOW+timedelta(1),GeographicBounds(17,20,-69,-63))
+QUERY=CatalogQuery(NOW-timedelta(1),NOW+timedelta(1),PUERTO_RICO.bounds)
 
 def test_update_counts_filters_and_saves():
     storage=MemoryStorage((event("same"),event("change"),))
@@ -35,7 +35,7 @@ def test_update_rejects_query_bounds_that_do_not_match_region():
     mismatched = CatalogQuery(
         NOW - timedelta(1),
         NOW + timedelta(1),
-        GeographicBounds(10, 11, -69, -63),
+        CARIBBEAN.bounds,
     )
     storage = MemoryStorage()
     with pytest.raises(ValueError, match="must match"):
