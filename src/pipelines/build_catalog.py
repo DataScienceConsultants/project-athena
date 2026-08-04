@@ -276,14 +276,16 @@ def events_to_dataframe(
 
     dataframe["event_time_utc"] = pd.to_datetime(
         dataframe["event_time_utc"],
+        format="mixed",
         utc=True,
-        errors="coerce",
+        errors="raise",
     )
 
     dataframe["updated_time_utc"] = pd.to_datetime(
         dataframe["updated_time_utc"],
+        format="mixed",
         utc=True,
-        errors="coerce",
+        errors="raise",
     )
 
     numeric_columns = [

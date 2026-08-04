@@ -55,7 +55,9 @@ def catalog_events_to_observatory_dataframe(
         columns=OBSERVATORY_CATALOG_COLUMNS,
     )
     for column in ("event_time_utc", "updated_time_utc"):
-        frame[column] = pd.to_datetime(frame[column], utc=True)
+        frame[column] = pd.to_datetime(
+            frame[column], format="mixed", utc=True, errors="raise"
+        )
 
     return frame.sort_values(
         ["event_time_utc", "event_id", "source"],

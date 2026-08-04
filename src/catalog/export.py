@@ -24,8 +24,12 @@ def to_dataframe(result: CatalogIngestionResult) -> pd.DataFrame:
     dataframe = pd.DataFrame.from_records(records, columns=CATALOG_COLUMNS)
     if dataframe.empty:
         return dataframe
-    dataframe["time"] = pd.to_datetime(dataframe["time"], utc=True)
-    dataframe["updated_time"] = pd.to_datetime(dataframe["updated_time"], utc=True)
+    dataframe["time"] = pd.to_datetime(
+        dataframe["time"], format="mixed", utc=True, errors="raise"
+    )
+    dataframe["updated_time"] = pd.to_datetime(
+        dataframe["updated_time"], format="mixed", utc=True, errors="raise"
+    )
     for column in ("latitude", "longitude", "depth", "magnitude"):
         dataframe[column] = pd.to_numeric(dataframe[column], errors="raise")
     return dataframe

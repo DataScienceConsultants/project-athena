@@ -30,7 +30,9 @@ def frame_from_events(events: Iterable[CatalogEvent]) -> pd.DataFrame:
     frame = pd.DataFrame.from_records(records, columns=EVENT_COLUMNS)
     for column in ("time", "updated_at"):
         if column in frame:
-            frame[column] = pd.to_datetime(frame[column], utc=True)
+            frame[column] = pd.to_datetime(
+                frame[column], format="mixed", utc=True, errors="raise"
+            )
     return frame
 
 
@@ -111,10 +113,17 @@ def save_catalog(frame: pd.DataFrame, path: str | Path) -> Path:
 def load_catalog(path: str | Path) -> pd.DataFrame:
     source = Path(path)
     if source.suffix.lower() == ".csv":
-        return pd.read_csv(source)
-    if source.suffix.lower() == ".parquet":
-        return pd.read_parquet(source, engine="pyarrow")
-    raise ValueError("Catalog path must end in .csv or .parquet.")
+        frame = pd.read_csv(source)
+    elif source.suffix.lower() == ".parquet":
+        frame = pd.read_parquet(source, engine="pyarrow")
+    else:
+        raise ValueError("Catalog path must end in .csv or .parquet.")
+    for column in ("time", "updated_at", "event_time_utc", "updated_time_utc"):
+        if column in frame:
+            frame[column] = pd.to_datetime(
+                frame[column], format="mixed", utc=True, errors="raise"
+            )
+    return frame
 
 write_catalog = save_catalog
 read_catalog = load_catalog

@@ -80,8 +80,9 @@ def validate_magnitude_catalog(
 
     catalog["event_time_utc"] = pd.to_datetime(
         catalog["event_time_utc"],
+        format="mixed",
         utc=True,
-        errors="coerce",
+        errors="raise",
     )
 
     catalog["magnitude"] = pd.to_numeric(
