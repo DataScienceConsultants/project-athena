@@ -64,9 +64,9 @@ def _normalize_catalog(catalog: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Catalog is missing required columns: {', '.join(sorted(missing))}")
     frame = catalog.copy(deep=True)
-    parsed = pd.to_datetime(frame["time"], utc=True, errors="coerce")
-    if parsed.isna().any():
-        raise ValueError("Catalog time column contains invalid timestamps.")
+    parsed = pd.to_datetime(
+        frame["time"], format="mixed", utc=True, errors="raise"
+    )
     frame["time"] = parsed
     return frame.sort_values("time", kind="mergesort").reset_index(drop=True)
 

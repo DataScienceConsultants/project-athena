@@ -40,7 +40,9 @@ def _normalized_frame(dataframe: pd.DataFrame, timestamp_column: str, magnitude_
     frame = dataframe[[timestamp_column, magnitude_column, depth_column]].copy()
     raw_time = frame[timestamp_column]
     missing_time = raw_time.isna()
-    parsed = pd.to_datetime(raw_time, utc=True, errors="coerce")
+    parsed = pd.to_datetime(
+        raw_time, format="mixed", utc=True, errors="coerce"
+    )
     if (parsed.isna() & ~missing_time).any():
         raise ValueError("Timestamp column contains invalid timestamps.")
     frame["_time"] = parsed

@@ -312,8 +312,9 @@ def build_observatory_report_from_dataframe(
 
     event_times = pd.to_datetime(
         catalog["event_time_utc"],
+        format="mixed",
         utc=True,
-        errors="coerce",
+        errors="raise",
     ).dropna()
 
     if event_times.empty:

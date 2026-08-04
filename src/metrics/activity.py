@@ -103,8 +103,9 @@ def validate_catalog(dataframe: pd.DataFrame) -> pd.DataFrame:
 
     catalog["event_time_utc"] = pd.to_datetime(
         catalog["event_time_utc"],
+        format="mixed",
         utc=True,
-        errors="coerce",
+        errors="raise",
     )
 
     catalog["magnitude"] = pd.to_numeric(

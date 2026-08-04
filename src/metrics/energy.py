@@ -193,8 +193,9 @@ def build_daily_energy(
 
     catalog["event_time_utc"] = pd.to_datetime(
         catalog["event_time_utc"],
+        format="mixed",
         utc=True,
-        errors="coerce",
+        errors="raise",
     )
 
     catalog = catalog.dropna(
