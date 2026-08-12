@@ -15,7 +15,11 @@ from src.global_research.catalog import (
     download_global_catalog,
     export_global_catalog_csv,
 )
-from src.global_research.faults import associate_catalog_events, load_fault_geojson
+from src.global_research.fault_index import (
+    FaultGridIndex,
+    associate_catalog_events_indexed,
+)
+from src.global_research.faults import load_fault_geojson
 from src.global_research.models import (
     FaultAssociation,
     GlobalCatalogPlan,
@@ -78,17 +82,19 @@ def run_global_research(
     if fault_geojson_path is not None:
         with Path(fault_geojson_path).open("r", encoding="utf-8") as source:
             faults = load_fault_geojson(json.load(source))
-        associations = associate_catalog_events(
-            catalog.events,
+        fault_index = FaultGridIndex.build(
             faults,
-            max_distance_km=max_fault_distance_km,
+            search_radius_km=max_fault_distance_km,
         )
+        associations = associate_catalog_events_indexed(catalog.events, fault_index)
         _write_associations(destination / "fault_associations.csv", associations)
         metadata.update(
             fault_source="GEM Global Active Faults Database",
             normalized_fault_trace_count=len(faults),
             event_fault_association_count=len(associations),
             max_fault_association_distance_km=float(max_fault_distance_km),
+            fault_candidate_index="2-degree conservative expanded-envelope grid",
+            fault_distance_method="exact great-circle point-to-segment distance",
             fault_association_semantics=(
                 "Nearest mapped active-fault geographic context within the configured "
                 "distance; not causal attribution."
