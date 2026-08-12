@@ -30,6 +30,11 @@ from src.global_research.planner import (
     planned_query_as_catalog_query,
     reference_50_year_plan,
 )
+from src.global_research.runner import (
+    GlobalResearchBundle,
+    run_global_research,
+    run_reference_50_year_research,
+)
 
 __all__ = [
     "AdaptiveGlobalCatalogPlanner",
@@ -41,6 +46,7 @@ __all__ = [
     "GLOBAL_BOUNDS",
     "GlobalCatalogDownload",
     "GlobalCatalogPlan",
+    "GlobalResearchBundle",
     "GlobalResearchProfile",
     "PlannedCatalogQuery",
     "REFERENCE_50_YEAR_PROFILE",
@@ -54,4 +60,6 @@ __all__ = [
     "nearest_fault",
     "planned_query_as_catalog_query",
     "reference_50_year_plan",
+    "run_global_research",
+    "run_reference_50_year_research",
 ]
