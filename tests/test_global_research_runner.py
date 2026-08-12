@@ -43,6 +43,7 @@ def test_runner_writes_reproducible_catalog_bundle(tmp_path):
     assert (output / "catalog.csv").is_file()
     assert (output / "catalog_plan.json").is_file()
     assert (output / "metadata.json").is_file()
+    assert not (output / "faults.geojson").exists()
     metadata = json.loads((output / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["catalog_event_count"] == 2
     assert metadata["catalog_query_count"] == 1
@@ -63,26 +64,22 @@ def test_runner_can_add_fault_context(tmp_path):
         def download(self, query):
             return (make_event("a", 1),)
 
-    fault_path = tmp_path / "faults.geojson"
-    fault_path.write_text(
-        json.dumps(
+    fault_payload = {
+        "type": "FeatureCollection",
+        "features": [
             {
-                "type": "FeatureCollection",
-                "features": [
-                    {
-                        "type": "Feature",
-                        "id": "fault-a",
-                        "properties": {"name": "Fixture Fault"},
-                        "geometry": {
-                            "type": "LineString",
-                            "coordinates": [[0.0, 0.0], [2.0, 0.0]],
-                        },
-                    }
-                ],
+                "type": "Feature",
+                "id": "fault-a",
+                "properties": {"name": "Fixture Fault"},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[0.0, 0.0], [2.0, 0.0]],
+                },
             }
-        ),
-        encoding="utf-8",
-    )
+        ],
+    }
+    fault_path = tmp_path / "faults.geojson"
+    fault_path.write_text(json.dumps(fault_payload), encoding="utf-8")
 
     output = tmp_path / "bundle"
     result = run_global_research(
@@ -96,7 +93,12 @@ def test_runner_can_add_fault_context(tmp_path):
     )
 
     assert (output / "fault_associations.csv").is_file()
+    assert (output / "faults.geojson").is_file()
+    persisted_faults = json.loads((output / "faults.geojson").read_text(encoding="utf-8"))
+    assert persisted_faults == fault_payload
     assert result.metadata["fault_context_included"] is True
+    assert result.metadata["fault_geojson_included"] is True
+    assert result.metadata["fault_geojson_feature_count"] == 1
     assert result.metadata["normalized_fault_trace_count"] == 1
     assert result.metadata["event_fault_association_count"] == 1
     assert "not causal attribution" in result.metadata["fault_association_semantics"]
