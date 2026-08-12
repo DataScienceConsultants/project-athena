@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "purpose": "Source provenance for retrospective global Project Athena research.",
+  "catalogs": {
+    "usgs_comcat": {
+      "role": "operational_global_ingestion",
+      "query_url": "https://earthquake.usgs.gov/fdsnws/event/1/query",
+      "count_url": "https://earthquake.usgs.gov/fdsnws/event/1/count",
+      "query_result_limit": 20000,
+      "notes": [
+        "Athena preflights large requests with the count endpoint and adaptively partitions them below the service query limit.",
+        "ComCat is the operational event source; source/catalog coverage differences must remain visible in research metadata."
+      ]
+    },
+    "isc_gem": {
+      "role": "homogeneous_large_event_reference",
+      "version": "12.1",
+      "release_date": "2025-11-27",
+      "coverage_end": "2021-12-31",
+      "license": "CC-BY-SA-3.0",
+      "doi": "10.31905/D808B825",
+      "notes": [
+        "Use as an independent large-event reference and completeness cross-check, not as an unqualified substitute for ComCat.",
+        "Historical global completeness varies by time and magnitude; Athena's first frozen 50-year cohort therefore uses M6.0+."
+      ]
+    }
+  },
+  "faults": {
+    "gem_global_active_faults": {
+      "role": "global_active_fault_context",
+      "repository": "https://github.com/GEMScienceTools/gem-global-active-faults",
+      "repository_branch": "master",
+      "version_of_record_path": "geojson/gem_active_faults.geojson",
+      "raw_url": "https://raw.githubusercontent.com/GEMScienceTools/gem-global-active-faults/master/geojson/gem_active_faults.geojson",
+      "observed_git_blob_sha": "f7a62707792e2b6d99412108bf1496d45bad51f7",
+      "license": "CC-BY-SA-4.0",
+      "notes": [
+        "GeoJSON is the source project's version-of-record format; record the source revision used for each Athena research bundle.",
+        "Retain original feature properties and source attribution when normalizing fault traces.",
+        "The source is global in scope but has documented geographic gaps; absence of a mapped nearby fault must never be interpreted as absence of active faulting."
+      ]
+    }
+  }
+}
