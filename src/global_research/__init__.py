@@ -7,6 +7,10 @@ from src.global_research.catalog import (
     download_global_catalog,
     export_global_catalog_csv,
 )
+from src.global_research.fault_index import (
+    FaultGridIndex,
+    associate_catalog_events_indexed,
+)
 from src.global_research.faults import (
     DEFAULT_FAULT_SOURCE,
     associate_catalog_events,
@@ -49,6 +53,7 @@ __all__ = [
     "CatalogPlanningError",
     "DEFAULT_FAULT_SOURCE",
     "FaultAssociation",
+    "FaultGridIndex",
     "FaultTrace",
     "GLOBAL_BOUNDS",
     "GlobalCatalogDownload",
@@ -60,6 +65,7 @@ __all__ = [
     "ResearchSourceError",
     "USGSCatalogCounter",
     "associate_catalog_events",
+    "associate_catalog_events_indexed",
     "distance_to_fault_km",
     "download_gem_global_active_faults",
     "download_global_catalog",
