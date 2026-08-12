@@ -44,8 +44,15 @@ jobs:
           catalog_path = bundle / "catalog.csv"
           plan_path = bundle / "catalog_plan.json"
           associations_path = bundle / "fault_associations.csv"
+          faults_path = bundle / "faults.geojson"
 
-          for path in (metadata_path, catalog_path, plan_path, associations_path):
+          for path in (
+              metadata_path,
+              catalog_path,
+              plan_path,
+              associations_path,
+              faults_path,
+          ):
               if not path.is_file():
                   raise SystemExit(f"Missing required research artifact: {path}")
 
@@ -58,6 +65,7 @@ jobs:
               "research_mode": "retrospective_global",
               "report_is_nonpredictive": True,
               "fault_context_included": True,
+              "fault_geojson_included": True,
           }
           for key, value in expected.items():
               if metadata.get(key) != value:
@@ -79,6 +87,17 @@ jobs:
           if association_count != metadata.get("event_fault_association_count"):
               raise SystemExit(
                   "Fault-association row count does not match metadata"
+              )
+
+          faults = json.loads(faults_path.read_text(encoding="utf-8"))
+          if faults.get("type") != "FeatureCollection":
+              raise SystemExit("faults.geojson is not a FeatureCollection")
+          feature_count = len(faults.get("features", []))
+          if feature_count <= 0:
+              raise SystemExit("faults.geojson contains no features")
+          if feature_count != metadata.get("fault_geojson_feature_count"):
+              raise SystemExit(
+                  "Fault GeoJSON feature count does not match metadata"
               )
 
           print(json.dumps(metadata, indent=2, sort_keys=True))
@@ -104,6 +123,10 @@ jobs:
           print(
               "- Fault associations: "
               f"`{metadata.get('event_fault_association_count', 0)}`"
+          )
+          print(
+              "- Fault GeoJSON features: "
+              f"`{metadata.get('fault_geojson_feature_count', 0)}`"
           )
           print(f"- Catalog queries: `{metadata['catalog_query_count']}`")
           print("- Scientific mode: retrospective, descriptive, nonpredictive")
