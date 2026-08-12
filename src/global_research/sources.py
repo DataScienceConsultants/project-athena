@@ -11,7 +11,12 @@ import requests
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RESEARCH_SOURCES_PATH = PROJECT_ROOT / "config" / "research_sources.json"
-DEFAULT_GEM_FAULT_PATH = PROJECT_ROOT / "data" / "sources" / "gem_active_faults.geojson"
+DEFAULT_GEM_FAULT_PATH = Path("data/sources/gem_active_faults.geojson")
+GEM_FAULT_RAW_URL = (
+    "https://raw.githubusercontent.com/GEMScienceTools/gem-global-active-faults/"
+    "master/geojson/gem_active_faults.geojson"
+)
+GEM_FAULT_GIT_BLOB_SHA = "f7a62707792e2b6d99412108bf1496d45bad51f7"
 
 
 class ResearchSourceError(RuntimeError):
@@ -79,23 +84,32 @@ def download_verified_geojson(
     return target
 
 
-def download_gem_global_active_faults(
-    destination: str | Path = DEFAULT_GEM_FAULT_PATH,
-    *,
-    sources_path: str | Path = RESEARCH_SOURCES_PATH,
-    timeout_seconds: float = 120.0,
-    session: Any = None,
-) -> Path:
-    """Download the exact GEM active-fault GeoJSON revision recorded by Athena."""
+def _configured_gem_source(
+    sources_path: str | Path | None,
+) -> tuple[str, str]:
+    if sources_path is None:
+        if not RESEARCH_SOURCES_PATH.exists():
+            return GEM_FAULT_RAW_URL, GEM_FAULT_GIT_BLOB_SHA
+        sources_path = RESEARCH_SOURCES_PATH
     sources = load_research_sources(sources_path)
     try:
         config = sources["faults"]["gem_global_active_faults"]
-        url = config["raw_url"]
-        expected_sha = config["observed_git_blob_sha"]
+        return str(config["raw_url"]), str(config["observed_git_blob_sha"])
     except (KeyError, TypeError) as exc:
         raise ResearchSourceError(
             "GEM active-fault source configuration is incomplete."
         ) from exc
+
+
+def download_gem_global_active_faults(
+    destination: str | Path = DEFAULT_GEM_FAULT_PATH,
+    *,
+    sources_path: str | Path | None = None,
+    timeout_seconds: float = 120.0,
+    session: Any = None,
+) -> Path:
+    """Download the exact GEM active-fault GeoJSON revision recorded by Athena."""
+    url, expected_sha = _configured_gem_source(sources_path)
     return download_verified_geojson(
         url=url,
         destination=destination,
