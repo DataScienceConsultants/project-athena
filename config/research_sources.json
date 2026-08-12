@@ -31,6 +31,7 @@
       "repository": "https://github.com/GEMScienceTools/gem-global-active-faults",
       "repository_branch": "master",
       "version_of_record_path": "geojson/gem_active_faults.geojson",
+      "raw_url": "https://raw.githubusercontent.com/GEMScienceTools/gem-global-active-faults/master/geojson/gem_active_faults.geojson",
       "observed_git_blob_sha": "f7a62707792e2b6d99412108bf1496d45bad51f7",
       "license": "CC-BY-SA-4.0",
       "notes": [
