@@ -81,7 +81,10 @@ def run_global_research(
 
     if fault_geojson_path is not None:
         with Path(fault_geojson_path).open("r", encoding="utf-8") as source:
-            faults = load_fault_geojson(json.load(source))
+            fault_payload = json.load(source)
+        faults = load_fault_geojson(fault_payload)
+        _write_geojson(destination / "faults.geojson", fault_payload)
+
         fault_index = FaultGridIndex.build(
             faults,
             search_radius_km=max_fault_distance_km,
@@ -90,6 +93,8 @@ def run_global_research(
         _write_associations(destination / "fault_associations.csv", associations)
         metadata.update(
             fault_source="GEM Global Active Faults Database",
+            fault_geojson_included=True,
+            fault_geojson_feature_count=len(fault_payload["features"]),
             normalized_fault_trace_count=len(faults),
             event_fault_association_count=len(associations),
             max_fault_association_distance_km=float(max_fault_distance_km),
@@ -157,6 +162,19 @@ def _plan_payload(plan: GlobalCatalogPlan) -> dict[str, Any]:
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(
         json.dumps(payload, indent=2, allow_nan=False, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_geojson(path: Path, payload: dict[str, Any]) -> None:
+    path.write_text(
+        json.dumps(
+            payload,
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        + "\n",
         encoding="utf-8",
     )
 
