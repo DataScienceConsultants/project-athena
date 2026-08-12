@@ -115,9 +115,7 @@ def _normalize_line(value: Any, feature_index: int) -> tuple[tuple[float, float]
         if not isinstance(vertex, Sequence) or isinstance(vertex, str) or len(vertex) < 2:
             raise ValueError(f"Fault feature {feature_index} contains an invalid vertex.")
         longitude, latitude = vertex[0], vertex[1]
-        normalized.append(
-            (validate_latitude(latitude), validate_longitude(longitude))
-        )
+        normalized.append((validate_latitude(latitude), validate_longitude(longitude)))
     return tuple(normalized)
 
 
@@ -201,7 +199,7 @@ def distance_to_fault_km(
         raise TypeError("fault must be FaultTrace.")
     return min(
         great_circle_segment_distance_km(latitude, longitude, start, end)
-        for start, end in zip(fault.coordinates, fault.coordinates[1:], strict=True)
+        for start, end in zip(fault.coordinates, fault.coordinates[1:])
     )
 
 
@@ -219,7 +217,9 @@ def nearest_fault(
     latitude = validate_latitude(latitude)
     longitude = validate_longitude(longitude)
     if max_distance_km is not None:
-        if isinstance(max_distance_km, bool) or not isinstance(max_distance_km, (int, float)):
+        if isinstance(max_distance_km, bool) or not isinstance(
+            max_distance_km, (int, float)
+        ):
             raise TypeError("max_distance_km must be numeric or None.")
         max_distance_km = float(max_distance_km)
         if not math.isfinite(max_distance_km) or max_distance_km < 0:
