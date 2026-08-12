@@ -35,6 +35,13 @@ from src.global_research.runner import (
     run_global_research,
     run_reference_50_year_research,
 )
+from src.global_research.sources import (
+    ResearchSourceError,
+    download_gem_global_active_faults,
+    download_verified_geojson,
+    git_blob_sha,
+    load_research_sources,
+)
 
 __all__ = [
     "AdaptiveGlobalCatalogPlanner",
@@ -50,13 +57,18 @@ __all__ = [
     "GlobalResearchProfile",
     "PlannedCatalogQuery",
     "REFERENCE_50_YEAR_PROFILE",
+    "ResearchSourceError",
     "USGSCatalogCounter",
     "associate_catalog_events",
     "distance_to_fault_km",
+    "download_gem_global_active_faults",
     "download_global_catalog",
+    "download_verified_geojson",
     "export_global_catalog_csv",
+    "git_blob_sha",
     "great_circle_segment_distance_km",
     "load_fault_geojson",
+    "load_research_sources",
     "nearest_fault",
     "planned_query_as_catalog_query",
     "reference_50_year_plan",
