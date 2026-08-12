@@ -29,8 +29,12 @@
     "gem_global_active_faults": {
       "role": "global_active_fault_context",
       "repository": "https://github.com/GEMScienceTools/gem-global-active-faults",
+      "repository_branch": "master",
+      "version_of_record_path": "geojson/gem_active_faults.geojson",
+      "observed_git_blob_sha": "f7a62707792e2b6d99412108bf1496d45bad51f7",
       "license": "CC-BY-SA-4.0",
       "notes": [
+        "GeoJSON is the source project's version-of-record format; record the source revision used for each Athena research bundle.",
         "Retain original feature properties and source attribution when normalizing fault traces.",
         "The source is global in scope but has documented geographic gaps; absence of a mapped nearby fault must never be interpreted as absence of active faulting."
       ]
