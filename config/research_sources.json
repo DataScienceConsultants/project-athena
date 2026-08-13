@@ -1,12 +1,18 @@
 {
-  "schema_version": 1,
-  "purpose": "Source provenance for retrospective global Project Athena research.",
+  "schema_version": 2,
+  "purpose": "Source provenance and citations for retrospective global Project Athena research.",
   "catalogs": {
     "usgs_comcat": {
       "role": "operational_global_ingestion",
       "query_url": "https://earthquake.usgs.gov/fdsnws/event/1/query",
       "count_url": "https://earthquake.usgs.gov/fdsnws/event/1/count",
       "query_result_limit": 20000,
+      "citation": {
+        "type": "data_service",
+        "authoring_organization": "U.S. Geological Survey",
+        "title": "USGS Earthquake Catalog (ComCat) FDSN Event Web Service",
+        "url": "https://earthquake.usgs.gov/fdsnws/event/1/"
+      },
       "notes": [
         "Athena preflights large requests with the count endpoint and adaptively partitions them below the service query limit.",
         "ComCat is the operational event source; source/catalog coverage differences must remain visible in research metadata."
@@ -19,6 +25,13 @@
       "coverage_end": "2021-12-31",
       "license": "CC-BY-SA-3.0",
       "doi": "10.31905/D808B825",
+      "citation": {
+        "type": "dataset",
+        "authoring_organization": "International Seismological Centre",
+        "title": "ISC-GEM Global Instrumental Earthquake Catalogue",
+        "version": "12.1",
+        "doi": "10.31905/D808B825"
+      },
       "notes": [
         "Use as an independent large-event reference and completeness cross-check, not as an unqualified substitute for ComCat.",
         "Historical global completeness varies by time and magnitude; Athena's first frozen 50-year cohort therefore uses M6.0+."
@@ -34,10 +47,48 @@
       "raw_url": "https://raw.githubusercontent.com/GEMScienceTools/gem-global-active-faults/master/geojson/gem_active_faults.geojson",
       "observed_git_blob_sha": "f7a62707792e2b6d99412108bf1496d45bad51f7",
       "license": "CC-BY-SA-4.0",
+      "citation": {
+        "type": "dataset",
+        "authoring_organization": "Global Earthquake Model Foundation",
+        "title": "GEM Global Active Faults Database",
+        "url": "https://github.com/GEMScienceTools/gem-global-active-faults"
+      },
       "notes": [
         "GeoJSON is the source project's version-of-record format; record the source revision used for each Athena research bundle.",
         "Retain original feature properties and source attribution when normalizing fault traces.",
         "The source is global in scope but has documented geographic gaps; absence of a mapped nearby fault must never be interpreted as absence of active faulting."
+      ]
+    }
+  },
+  "plate_boundaries": {
+    "bird_pb2002": {
+      "role": "global_plate_boundary_context",
+      "model": "PB2002",
+      "official_data_url": "https://peterbird.name/oldftp/PB2002/",
+      "scientific_source_url": "https://doi.org/10.1029/2001GC000252",
+      "distribution_repository": "https://github.com/fraxen/tectonicplates",
+      "distribution_commit": "339b0c56563c118307b1f4542703047f5f698fae",
+      "version_of_record_path": "original/PB2002_steps.dat.txt",
+      "raw_url": "https://raw.githubusercontent.com/fraxen/tectonicplates/339b0c56563c118307b1f4542703047f5f698fae/original/PB2002_steps.dat.txt",
+      "observed_git_blob_sha": "b48506d79c614b241ce26cf949492ee7c6676d60",
+      "distribution_license": "ODC-By-1.0",
+      "distribution_license_url": "https://opendatacommons.org/licenses/by/1-0/",
+      "citation": {
+        "type": "journal_article_and_supplementary_dataset",
+        "author": "Peter Bird",
+        "year": 2003,
+        "title": "An updated digital model of plate boundaries",
+        "journal": "Geochemistry, Geophysics, Geosystems",
+        "volume": "4",
+        "article": "1027",
+        "doi": "10.1029/2001GC000252",
+        "formatted": "Bird, P. (2003). An updated digital model of plate boundaries. Geochemistry, Geophysics, Geosystems, 4, 1027. https://doi.org/10.1029/2001GC000252"
+      },
+      "notes": [
+        "Athena uses the PB2002 digitization-step file because it explicitly records adjacent plate identifiers and seven source-defined boundary classes.",
+        "The pinned fraxen/tectonicplates mirror preserves the original PB2002 supporting data bytes used by Athena; scientific attribution remains Bird (2003).",
+        "The ODC-By-1.0 license recorded here applies to the pinned mirror collection; Athena preserves Bird (2003) citation and mirror provenance in generated artifacts.",
+        "Plate-boundary context is descriptive and retrospective. Proximity or plate-pair membership must not be interpreted as causal attribution or future-earthquake probability."
       ]
     }
   }
