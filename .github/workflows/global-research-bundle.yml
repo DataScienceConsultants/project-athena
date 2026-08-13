@@ -26,10 +26,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install '.[dev]'
 
-      - name: Build frozen 50-year global M6+ bundle with GEM fault context
+      - name: Build frozen 50-year global M6+ bundle with GEM and PB2002 context
         run: |
           python -m src.global_research \
             --with-gem-faults \
+            --with-pb2002-boundaries \
             --output outputs/global-m6-1976-2025
 
       - name: Validate generated bundle
@@ -45,6 +46,8 @@ jobs:
           plan_path = bundle / "catalog_plan.json"
           associations_path = bundle / "fault_associations.csv"
           faults_path = bundle / "faults.geojson"
+          plate_context_path = bundle / "event_plate_context.csv"
+          plate_boundaries_path = bundle / "plate_boundaries.geojson"
 
           for path in (
               metadata_path,
@@ -52,12 +55,15 @@ jobs:
               plan_path,
               associations_path,
               faults_path,
+              plate_context_path,
+              plate_boundaries_path,
           ):
               if not path.is_file():
                   raise SystemExit(f"Missing required research artifact: {path}")
 
           metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
           expected = {
+              "bundle_schema_version": 2,
               "profile_id": "global-m6-1976-2025",
               "start_utc": "1976-01-01T00:00:00Z",
               "end_utc": "2026-01-01T00:00:00Z",
@@ -66,6 +72,10 @@ jobs:
               "report_is_nonpredictive": True,
               "fault_context_included": True,
               "fault_geojson_included": True,
+              "plate_boundary_context_included": True,
+              "plate_boundary_geojson_included": True,
+              "plate_boundary_step_count": 5819,
+              "plate_boundary_geojson_feature_count": 5819,
           }
           for key, value in expected.items():
               if metadata.get(key) != value:
@@ -100,6 +110,49 @@ jobs:
                   "Fault GeoJSON feature count does not match metadata"
               )
 
+          boundaries = json.loads(
+              plate_boundaries_path.read_text(encoding="utf-8")
+          )
+          if boundaries.get("type") != "FeatureCollection":
+              raise SystemExit("plate_boundaries.geojson is not a FeatureCollection")
+          boundary_count = len(boundaries.get("features", []))
+          if boundary_count != 5819:
+              raise SystemExit(
+                  f"Unexpected PB2002 boundary-step feature count: {boundary_count}"
+              )
+          if boundaries.get("athena", {}).get("report_is_nonpredictive") is not True:
+              raise SystemExit("Plate-boundary artifact lost nonpredictive marker")
+
+          with plate_context_path.open("r", encoding="utf-8", newline="") as source:
+              plate_context_count = sum(1 for _ in csv.DictReader(source))
+          if plate_context_count <= 0:
+              raise SystemExit("Generated event plate context is empty")
+          if plate_context_count != metadata.get(
+              "event_plate_boundary_association_count"
+          ):
+              raise SystemExit(
+                  "Event plate-context row count does not match metadata"
+              )
+
+          citations = {
+              item.get("source_key"): item
+              for item in metadata.get("source_citations", [])
+              if isinstance(item, dict)
+          }
+          bird = citations.get("bird_pb2002") or {}
+          if (bird.get("citation") or {}).get("doi") != "10.1029/2001GC000252":
+              raise SystemExit("Bird PB2002 DOI citation is missing or incorrect")
+          if bird.get("distribution_license") != "ODC-By-1.0":
+              raise SystemExit("PB2002 distribution license provenance is missing")
+          if bird.get("distribution_commit") != (
+              "339b0c56563c118307b1f4542703047f5f698fae"
+          ):
+              raise SystemExit("PB2002 pinned distribution commit is missing")
+          if bird.get("observed_git_blob_sha") != (
+              "b48506d79c614b241ce26cf949492ee7c6676d60"
+          ):
+              raise SystemExit("PB2002 pinned source blob SHA is missing")
+
           print(json.dumps(metadata, indent=2, sort_keys=True))
           PY
 
@@ -122,7 +175,7 @@ jobs:
                   encoding="utf-8"
               )
           )
-          print("# Athena Global Research Bundle")
+          print("# Athena Global Research Bundle v2")
           print()
           print(f"- Profile: `{metadata['profile_id']}`")
           print(f"- Window: `{metadata['start_utc']}` to `{metadata['end_utc']}`")
@@ -136,15 +189,24 @@ jobs:
               "- Fault GeoJSON features: "
               f"`{metadata.get('fault_geojson_feature_count', 0)}`"
           )
+          print(
+              "- PB2002 boundary steps: "
+              f"`{metadata.get('plate_boundary_step_count', 0)}`"
+          )
+          print(
+              "- Event-to-boundary contexts: "
+              f"`{metadata.get('event_plate_boundary_association_count', 0)}`"
+          )
+          print("- PB2002 citation: `Bird (2003), DOI 10.1029/2001GC000252`")
           print(f"- Catalog queries: `{metadata['catalog_query_count']}`")
           print("- Scientific mode: retrospective, descriptive, nonpredictive")
-          print("- Durable release tag: `research-global-m6-1976-2025-v1`")
+          print("- Durable release tag: `research-global-m6-1976-2025-v2`")
           PY
 
       - name: Upload temporary workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: athena-global-m6-1976-2025
+          name: athena-global-m6-1976-2025-v2
           path: outputs/global-m6-1976-2025/
           if-no-files-found: error
           retention-days: 30
@@ -152,16 +214,18 @@ jobs:
       - name: Publish durable GitHub release asset
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: research-global-m6-1976-2025-v1
+          RELEASE_TAG: research-global-m6-1976-2025-v2
         run: |
           set -euo pipefail
 
           RELEASE_NOTES=$(cat <<'EOF'
-          Frozen Project Athena global research bundle for the complete 1976–2025 calendar-year window, magnitude 6.0 and above.
+          Project Athena global research bundle v2 for the complete 1976–2025 calendar-year window, magnitude 6.0 and above.
 
-          Includes the USGS ComCat catalog, catalog plan, nearest mapped GEM active-fault geographic context, and the verified GEM fault GeoJSON used by Project Seismic.
+          Includes the USGS ComCat catalog, catalog plan, verified GEM active-fault geometry and nearest-fault geographic context, plus Bird PB2002 plate-boundary geometry and event-to-boundary/plate-pair context.
 
-          Scientific scope: retrospective, descriptive, and nonpredictive. Nearest mapped active-fault proximity is geographic context only and is not causal attribution.
+          Plate-boundary scientific citation: Bird, P. (2003), An updated digital model of plate boundaries, Geochemistry, Geophysics, Geosystems, 4, 1027. DOI: 10.1029/2001GC000252.
+
+          Scientific scope: retrospective, descriptive, and nonpredictive. Nearest mapped fault and plate-boundary associations are geographic/tectonic context only and are not causal attribution or future-earthquake probabilities.
           EOF
           )
 
@@ -174,7 +238,7 @@ jobs:
             gh release create "$RELEASE_TAG" \
               outputs/athena-global-m6-1976-2025.zip \
               outputs/athena-global-m6-1976-2025.zip.sha256 \
-              --title "Athena Global M6+ Research Bundle (1976–2025)" \
+              --title "Athena Global M6+ Research Bundle v2 (1976–2025)" \
               --notes "$RELEASE_NOTES" \
               --target "$GITHUB_SHA"
           fi
