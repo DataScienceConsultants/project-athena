@@ -1,4 +1,4 @@
-"""Public API for Athena's retrospective global seismic/fault research layer."""
+"""Public API for Athena's retrospective global seismic research layer."""
 
 from src.global_research.catalog import (
     CatalogCountError,
@@ -28,6 +28,19 @@ from src.global_research.models import (
     GlobalResearchProfile,
     PlannedCatalogQuery,
 )
+from src.global_research.plate_boundaries import (
+    PB2002_BOUNDARY_CLASSES,
+    PB2002_CITATION_KEY,
+    PB2002_SOURCE,
+    PlateBoundaryAssociation,
+    PlateBoundaryGridIndex,
+    PlateBoundaryStep,
+    associate_catalog_events_with_plate_boundaries,
+    distance_to_plate_boundary_step_km,
+    nearest_plate_boundary,
+    parse_pb2002_steps,
+    plate_boundary_feature_collection,
+)
 from src.global_research.planner import (
     AdaptiveGlobalCatalogPlanner,
     CatalogPlanningError,
@@ -42,9 +55,12 @@ from src.global_research.runner import (
 from src.global_research.sources import (
     ResearchSourceError,
     download_gem_global_active_faults,
+    download_pb2002_steps,
+    download_verified_file,
     download_verified_geojson,
     git_blob_sha,
     load_research_sources,
+    research_source_citation,
 )
 
 __all__ = [
@@ -60,15 +76,25 @@ __all__ = [
     "GlobalCatalogPlan",
     "GlobalResearchBundle",
     "GlobalResearchProfile",
+    "PB2002_BOUNDARY_CLASSES",
+    "PB2002_CITATION_KEY",
+    "PB2002_SOURCE",
     "PlannedCatalogQuery",
+    "PlateBoundaryAssociation",
+    "PlateBoundaryGridIndex",
+    "PlateBoundaryStep",
     "REFERENCE_50_YEAR_PROFILE",
     "ResearchSourceError",
     "USGSCatalogCounter",
     "associate_catalog_events",
     "associate_catalog_events_indexed",
+    "associate_catalog_events_with_plate_boundaries",
     "distance_to_fault_km",
+    "distance_to_plate_boundary_step_km",
     "download_gem_global_active_faults",
     "download_global_catalog",
+    "download_pb2002_steps",
+    "download_verified_file",
     "download_verified_geojson",
     "export_global_catalog_csv",
     "git_blob_sha",
@@ -76,8 +102,12 @@ __all__ = [
     "load_fault_geojson",
     "load_research_sources",
     "nearest_fault",
+    "nearest_plate_boundary",
+    "parse_pb2002_steps",
     "planned_query_as_catalog_query",
+    "plate_boundary_feature_collection",
     "reference_50_year_plan",
+    "research_source_citation",
     "run_global_research",
     "run_reference_50_year_research",
 ]
