@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-global-research-bundle:
@@ -103,6 +103,14 @@ jobs:
           print(json.dumps(metadata, indent=2, sort_keys=True))
           PY
 
+      - name: Package durable release asset
+        run: |
+          set -euo pipefail
+          cd outputs
+          zip -qr athena-global-m6-1976-2025.zip global-m6-1976-2025
+          sha256sum athena-global-m6-1976-2025.zip \
+            > athena-global-m6-1976-2025.zip.sha256
+
       - name: Write run summary
         run: |
           python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
@@ -130,12 +138,43 @@ jobs:
           )
           print(f"- Catalog queries: `{metadata['catalog_query_count']}`")
           print("- Scientific mode: retrospective, descriptive, nonpredictive")
+          print("- Durable release tag: `research-global-m6-1976-2025-v1`")
           PY
 
-      - name: Upload research bundle
+      - name: Upload temporary workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: athena-global-m6-1976-2025
           path: outputs/global-m6-1976-2025/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish durable GitHub release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: research-global-m6-1976-2025-v1
+        run: |
+          set -euo pipefail
+
+          RELEASE_NOTES=$(cat <<'EOF'
+          Frozen Project Athena global research bundle for the complete 1976–2025 calendar-year window, magnitude 6.0 and above.
+
+          Includes the USGS ComCat catalog, catalog plan, nearest mapped GEM active-fault geographic context, and the verified GEM fault GeoJSON used by Project Seismic.
+
+          Scientific scope: retrospective, descriptive, and nonpredictive. Nearest mapped active-fault proximity is geographic context only and is not causal attribution.
+          EOF
+          )
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" \
+              outputs/athena-global-m6-1976-2025.zip \
+              outputs/athena-global-m6-1976-2025.zip.sha256 \
+              --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              outputs/athena-global-m6-1976-2025.zip \
+              outputs/athena-global-m6-1976-2025.zip.sha256 \
+              --title "Athena Global M6+ Research Bundle (1976–2025)" \
+              --notes "$RELEASE_NOTES" \
+              --target "$GITHUB_SHA"
+          fi
