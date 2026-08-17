@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "purpose": "Source provenance and citations for retrospective global Project Athena research.",
   "catalogs": {
     "usgs_comcat": {
@@ -89,6 +89,96 @@
         "The pinned fraxen/tectonicplates mirror preserves the original PB2002 supporting data bytes used by Athena; scientific attribution remains Bird (2003).",
         "The ODC-By-1.0 license recorded here applies to the pinned mirror collection; Athena preserves Bird (2003) citation and mirror provenance in generated artifacts.",
         "Plate-boundary context is descriptive and retrospective. Proximity or plate-pair membership must not be interpreted as causal attribution or future-earthquake probability."
+      ]
+    }
+  },
+  "methods": {
+    "usgs_magnitude_types": {
+      "role": "magnitude_type_interpretation",
+      "citation": {
+        "type": "technical_reference",
+        "authoring_organization": "U.S. Geological Survey",
+        "title": "Magnitude Types",
+        "url": "https://www.usgs.gov/programs/earthquake-hazards/magnitude-types"
+      },
+      "notes": [
+        "Athena treats only USGS Mw-family preferred magnitude types (Mw, Mww, Mwc, Mwb, Mwr, Mwp) as eligible for the scalar seismic-moment conversion.",
+        "Other magnitude types remain unconverted rather than being silently treated as Mw."
+      ]
+    },
+    "hanks_kanamori_1979": {
+      "role": "moment_magnitude_to_scalar_moment_relation",
+      "citation": {
+        "type": "journal_article",
+        "author": "Thomas C. Hanks; Hiroo Kanamori",
+        "year": 1979,
+        "title": "A moment magnitude scale",
+        "journal": "Journal of Geophysical Research: Solid Earth",
+        "volume": "84",
+        "issue": "B5",
+        "pages": "2348-2350",
+        "doi": "10.1029/JB084iB05p02348",
+        "formatted": "Hanks, T. C., & Kanamori, H. (1979). A moment magnitude scale. Journal of Geophysical Research, 84(B5), 2348-2350. https://doi.org/10.1029/JB084iB05p02348"
+      },
+      "notes": [
+        "Athena uses the SI form Mw = 2/3 (log10 M0 - 9.1), equivalently M0 = 10^(1.5 Mw + 9.1) N m.",
+        "Scalar seismic moment is a source-size variable; it is not interpreted as energy delivered to another fault."
+      ]
+    },
+    "dieterich_1994": {
+      "role": "earthquake_clustering_physical_context",
+      "citation": {
+        "type": "journal_article",
+        "author": "James Dieterich",
+        "year": 1994,
+        "title": "A constitutive law for rate of earthquake production and its application to earthquake clustering",
+        "journal": "Journal of Geophysical Research: Solid Earth",
+        "volume": "99",
+        "issue": "B2",
+        "pages": "2601-2618",
+        "doi": "10.1029/93JB02581",
+        "formatted": "Dieterich, J. (1994). A constitutive law for rate of earthquake production and its application to earthquake clustering. Journal of Geophysical Research, 99(B2), 2601-2618. https://doi.org/10.1029/93JB02581"
+      },
+      "notes": [
+        "This paper provides physical context for earthquake-rate changes and clustering after stress perturbations.",
+        "Athena interaction v1 does not implement a Dieterich rate-and-state inversion or infer stressing history."
+      ]
+    },
+    "king_stein_lin_1994": {
+      "role": "static_stress_triggering_physical_context",
+      "citation": {
+        "type": "journal_article",
+        "author": "Geoffrey C. P. King; Ross S. Stein; Jian Lin",
+        "year": 1994,
+        "title": "Static stress changes and the triggering of earthquakes",
+        "journal": "Bulletin of the Seismological Society of America",
+        "volume": "84",
+        "issue": "3",
+        "pages": "935-953",
+        "doi": "10.1785/BSSA0840030935",
+        "formatted": "King, G. C. P., Stein, R. S., & Lin, J. (1994). Static stress changes and the triggering of earthquakes. Bulletin of the Seismological Society of America, 84(3), 935-953. https://doi.org/10.1785/BSSA0840030935"
+      },
+      "notes": [
+        "This paper provides context for Coulomb static-stress triggering analyses.",
+        "Athena interaction v1 has no rupture geometry, slip model, receiver-fault orientation, or Coulomb stress calculation and therefore makes no static-stress attribution."
+      ]
+    },
+    "brodsky_prejean_2005": {
+      "role": "dynamic_triggering_and_energy_caution",
+      "citation": {
+        "type": "journal_article",
+        "author": "Emily E. Brodsky; Stephanie G. Prejean",
+        "year": 2005,
+        "title": "New constraints on mechanisms of remotely triggered seismicity at Long Valley Caldera",
+        "journal": "Journal of Geophysical Research: Solid Earth",
+        "volume": "110",
+        "article": "B04302",
+        "doi": "10.1029/2004JB003211",
+        "formatted": "Brodsky, E. E., & Prejean, S. G. (2005). New constraints on mechanisms of remotely triggered seismicity at Long Valley Caldera. Journal of Geophysical Research, 110, B04302. https://doi.org/10.1029/2004JB003211"
+      },
+      "notes": [
+        "This work documents dynamic triggering and cautions that cumulative shaking energy density alone does not explain the observed remote triggering at Long Valley.",
+        "Athena interaction v1 therefore does not label scalar moment or catalog association as transferred energy or causal dynamic triggering."
       ]
     }
   }
