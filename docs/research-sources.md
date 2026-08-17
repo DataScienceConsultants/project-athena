@@ -11,7 +11,7 @@ Generated research bundle metadata embeds compact citation/provenance records fr
 3. Record distribution licensing separately from scientific authorship.
 4. Preserve source-defined categories and fields. Athena may normalize representation for computation, but it must not silently invent tectonic classifications.
 5. Keep geographic context distinct from causality. Fault or plate-boundary proximity does not imply that a mapped structure caused an earthquake or that a future event is more likely.
-6. Add methodology papers only when the corresponding methodology is actually implemented in Athena.
+6. Distinguish **implemented methodology** from **physical/scientific context**. A cited paper must not be described as an Athena calculation unless Athena actually implements and tests that calculation.
 
 ## Operational earthquake catalog
 
@@ -20,6 +20,12 @@ Generated research bundle metadata embeds compact citation/provenance records fr
 **U.S. Geological Survey. _USGS Earthquake Catalog (ComCat) FDSN Event Web Service_.**
 
 Athena uses the USGS FDSN event service as the operational source for the frozen global research catalog. The global planner preflights and partitions requests to remain below service result limits. Catalog coverage and source limitations remain explicit in bundle metadata.
+
+### USGS magnitude types
+
+**U.S. Geological Survey. _Magnitude Types_.**
+
+Athena uses the USGS magnitude-type definitions to decide whether a preferred catalog magnitude belongs to the Mw family. Only `Mw`, `Mww`, `Mwc`, `Mwb`, `Mwr`, and `Mwp` are eligible for Athena's scalar seismic-moment conversion in Earthquake Interaction Study v1. Other magnitude types remain unconverted rather than being silently treated as moment magnitude.
 
 ## Active-fault context
 
@@ -57,6 +63,58 @@ PB2002 plate-boundary proximity and plate-pair membership are retrospective tect
 
 Athena records ISC-GEM as an independent homogeneous large-event reference and completeness cross-check. It is not used as an unqualified replacement for the operational ComCat cohort.
 
-## Future interaction and stress-response methodology
+## Earthquake Interaction Study v1
 
-The planned Earthquake Interaction Study will require its own methodology citations for any implemented physical or statistical model. Relevant literature may include seismic moment/energy relations, static Coulomb stress transfer, rate-and-state seismicity response, and dynamic triggering. These works should be added to Athena's formal methodology bibliography only when their equations or methods are actually implemented and tested; they should not be cited as if they already define the current plate-context layer.
+Earthquake Interaction Study v1 is a **retrospective descriptive association study** over the frozen global M6.0+ cohort. For every qualifying source event, Athena measures M6.0+ activity before and after the source event using paired 1-, 7-, 30-, 90-, and 365-day windows and cumulative 100-, 250-, 500-, 1,000-, and 2,000-km epicentral distance windows.
+
+For each source/window combination, Athena records:
+
+- all qualifying nearby events before and after the source event;
+- events sharing the same orientation-independent PB2002 plate pair;
+- events sharing the same PB2002 boundary identifier;
+- whether the pre and post windows are complete within the frozen catalog bounds;
+- source magnitude type and scalar seismic moment when the preferred magnitude is an Mw-family magnitude.
+
+V1 deliberately reports descriptive pre/post counts and ratios without p-values. Observation windows overlap, so treating each source event as statistically independent would be unjustified. A later inferential version must introduce and validate a dependence-aware null model before Athena reports statistical significance.
+
+### Implemented scalar seismic-moment relation
+
+**Hanks, T. C., & Kanamori, H. (1979). _A moment magnitude scale_. Journal of Geophysical Research, 84(B5), 2348-2350. https://doi.org/10.1029/JB084iB05p02348**
+
+For USGS Mw-family preferred magnitudes only, Athena implements the SI relation
+
+`Mw = 2/3 (log10 M0 - 9.1)`
+
+or equivalently
+
+`M0 = 10^(1.5 Mw + 9.1) N m`.
+
+Athena labels this quantity **scalar seismic moment**, not transferred energy. Non-Mw magnitudes are not silently converted.
+
+### Physical context: earthquake-rate changes and clustering
+
+**Dieterich, J. (1994). _A constitutive law for rate of earthquake production and its application to earthquake clustering_. Journal of Geophysical Research, 99(B2), 2601-2618. https://doi.org/10.1029/93JB02581**
+
+Dieterich provides physical context for why earthquake rates may change after stress perturbations and for temporal clustering. Earthquake Interaction Study v1 does **not** implement a Dieterich rate-and-state inversion or infer stressing history.
+
+### Physical context: static Coulomb stress triggering
+
+**King, G. C. P., Stein, R. S., & Lin, J. (1994). _Static stress changes and the triggering of earthquakes_. Bulletin of the Seismological Society of America, 84(3), 935-953. https://doi.org/10.1785/BSSA0840030935**
+
+King, Stein, and Lin provide the physical basis for later Coulomb-stress research. V1 does **not** calculate Coulomb stress because the frozen catalog/plate-context layer does not yet provide the rupture geometry, slip model, receiver-fault orientation, and frictional assumptions required for such a calculation.
+
+### Physical context and caution: dynamic triggering
+
+**Brodsky, E. E., & Prejean, S. G. (2005). _New constraints on mechanisms of remotely triggered seismicity at Long Valley Caldera_. Journal of Geophysical Research, 110, B04302. https://doi.org/10.1029/2004JB003211**
+
+Brodsky and Prejean document remotely triggered seismicity and show why cumulative shaking energy density alone is not a sufficient explanation for the observed triggering at Long Valley. Athena therefore does not interpret a large source magnitude, scalar seismic moment, or subsequent catalog association as proof that earthquake energy caused a later event.
+
+## V1 limitations that must remain visible
+
+- The cohort contains M6.0+ events only and cannot describe ordinary lower-magnitude aftershock populations.
+- Spatial separation is epicentral great-circle distance, not rupture-to-rupture distance or along-boundary path length.
+- PB2002 relationships are nearest mapped tectonic context and are not causal attribution.
+- V1 does not calculate static Coulomb stress, dynamic wave stress, rupture propagation, slip transfer, or receiver-fault loading.
+- Overlapping windows create dependence; v1 therefore does not report p-values or claim statistical significance.
+- Scalar seismic moment is a source-size variable and is not labeled transferred energy.
+- The study is retrospective, descriptive, and nonpredictive.
