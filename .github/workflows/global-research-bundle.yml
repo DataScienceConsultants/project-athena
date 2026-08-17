@@ -26,11 +26,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install '.[dev]'
 
-      - name: Build frozen 50-year global M6+ bundle with GEM and PB2002 context
+      - name: Build frozen 50-year global M6+ bundle with interaction study
         run: |
           python -m src.global_research \
             --with-gem-faults \
             --with-pb2002-boundaries \
+            --with-interaction-study \
             --output outputs/global-m6-1976-2025
 
       - name: Validate generated bundle
@@ -48,6 +49,9 @@ jobs:
           faults_path = bundle / "faults.geojson"
           plate_context_path = bundle / "event_plate_context.csv"
           plate_boundaries_path = bundle / "plate_boundaries.geojson"
+          interaction_pairs_path = bundle / "interaction_pairs.csv"
+          interaction_windows_path = bundle / "interaction_windows.csv"
+          interaction_summary_path = bundle / "interaction_summary.json"
 
           for path in (
               metadata_path,
@@ -57,13 +61,16 @@ jobs:
               faults_path,
               plate_context_path,
               plate_boundaries_path,
+              interaction_pairs_path,
+              interaction_windows_path,
+              interaction_summary_path,
           ):
               if not path.is_file():
                   raise SystemExit(f"Missing required research artifact: {path}")
 
           metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
           expected = {
-              "bundle_schema_version": 2,
+              "bundle_schema_version": 3,
               "profile_id": "global-m6-1976-2025",
               "start_utc": "1976-01-01T00:00:00Z",
               "end_utc": "2026-01-01T00:00:00Z",
@@ -76,12 +83,31 @@ jobs:
               "plate_boundary_geojson_included": True,
               "plate_boundary_step_count": 5819,
               "plate_boundary_geojson_feature_count": 5819,
+              "interaction_study_included": True,
+              "interaction_study_id": "global-m6-1976-2025-interaction-v1",
+              "interaction_summary_included": True,
+              "interaction_inference_status": (
+                  "descriptive_only_no_independence_assumption"
+              ),
           }
           for key, value in expected.items():
               if metadata.get(key) != value:
                   raise SystemExit(
                       f"Unexpected metadata {key}: {metadata.get(key)!r}; expected {value!r}"
                   )
+
+          if metadata.get("interaction_time_windows_days") != [1.0, 7.0, 30.0, 90.0, 365.0]:
+              raise SystemExit("Unexpected interaction time windows")
+          if metadata.get("interaction_distance_windows_km") != [
+              100.0,
+              250.0,
+              500.0,
+              1000.0,
+              2000.0,
+          ]:
+              raise SystemExit("Unexpected interaction distance windows")
+          if "no causal triggering" not in metadata.get("interaction_semantics", ""):
+              raise SystemExit("Interaction semantics lost noncausal language")
 
           with catalog_path.open("r", encoding="utf-8", newline="") as source:
               catalog_count = sum(1 for _ in csv.DictReader(source))
@@ -95,9 +121,7 @@ jobs:
           with associations_path.open("r", encoding="utf-8", newline="") as source:
               association_count = sum(1 for _ in csv.DictReader(source))
           if association_count != metadata.get("event_fault_association_count"):
-              raise SystemExit(
-                  "Fault-association row count does not match metadata"
-              )
+              raise SystemExit("Fault-association row count does not match metadata")
 
           faults = json.loads(faults_path.read_text(encoding="utf-8"))
           if faults.get("type") != "FeatureCollection":
@@ -106,13 +130,9 @@ jobs:
           if feature_count <= 0:
               raise SystemExit("faults.geojson contains no features")
           if feature_count != metadata.get("fault_geojson_feature_count"):
-              raise SystemExit(
-                  "Fault GeoJSON feature count does not match metadata"
-              )
+              raise SystemExit("Fault GeoJSON feature count does not match metadata")
 
-          boundaries = json.loads(
-              plate_boundaries_path.read_text(encoding="utf-8")
-          )
+          boundaries = json.loads(plate_boundaries_path.read_text(encoding="utf-8"))
           if boundaries.get("type") != "FeatureCollection":
               raise SystemExit("plate_boundaries.geojson is not a FeatureCollection")
           boundary_count = len(boundaries.get("features", []))
@@ -130,9 +150,53 @@ jobs:
           if plate_context_count != metadata.get(
               "event_plate_boundary_association_count"
           ):
-              raise SystemExit(
-                  "Event plate-context row count does not match metadata"
-              )
+              raise SystemExit("Event plate-context row count does not match metadata")
+
+          with interaction_pairs_path.open("r", encoding="utf-8", newline="") as source:
+              interaction_pair_count = sum(1 for _ in csv.DictReader(source))
+          if interaction_pair_count <= 0:
+              raise SystemExit("Generated interaction pair artifact is empty")
+          if interaction_pair_count != metadata.get("interaction_pair_count"):
+              raise SystemExit("Interaction pair row count does not match metadata")
+
+          with interaction_windows_path.open("r", encoding="utf-8", newline="") as source:
+              interaction_window_count = sum(1 for _ in csv.DictReader(source))
+          if interaction_window_count <= 0:
+              raise SystemExit("Generated interaction-window artifact is empty")
+          if interaction_window_count != metadata.get(
+              "interaction_window_observation_count"
+          ):
+              raise SystemExit("Interaction-window row count does not match metadata")
+
+          interaction_summary = json.loads(
+              interaction_summary_path.read_text(encoding="utf-8")
+          )
+          summary_expected = {
+              "schema_version": 1,
+              "study_id": "global-m6-1976-2025-interaction-v1",
+              "profile_id": "global-m6-1976-2025",
+              "catalog_minimum_magnitude": 6.0,
+              "research_mode": "retrospective_descriptive",
+              "inference_status": "descriptive_only_no_independence_assumption",
+              "report_is_nonpredictive": True,
+              "pair_count": interaction_pair_count,
+              "window_observation_count": interaction_window_count,
+              "window_statistic_count": 25,
+          }
+          for key, value in summary_expected.items():
+              if interaction_summary.get(key) != value:
+                  raise SystemExit(
+                      f"Unexpected interaction summary {key}: "
+                      f"{interaction_summary.get(key)!r}; expected {value!r}"
+                  )
+          if len(interaction_summary.get("limitations", [])) < 6:
+              raise SystemExit("Interaction summary is missing required limitations")
+          statistics = interaction_summary.get("statistics")
+          if not isinstance(statistics, list) or len(statistics) != 25:
+              raise SystemExit("Interaction summary must contain all 25 window cells")
+          for statistic in statistics:
+              if statistic.get("eligible_source_count", 0) <= 0:
+                  raise SystemExit("An interaction window has no edge-complete sources")
 
           citations = {
               item.get("source_key"): item
@@ -153,6 +217,19 @@ jobs:
           ):
               raise SystemExit("PB2002 pinned source blob SHA is missing")
 
+          expected_method_dois = {
+              "hanks_kanamori_1979": "10.1029/JB084iB05p02348",
+              "dieterich_1994": "10.1029/93JB02581",
+              "king_stein_lin_1994": "10.1785/BSSA0840030935",
+              "brodsky_prejean_2005": "10.1029/2004JB003211",
+          }
+          for key, doi in expected_method_dois.items():
+              citation = (citations.get(key) or {}).get("citation") or {}
+              if citation.get("doi") != doi:
+                  raise SystemExit(f"Interaction-method DOI is missing or incorrect: {key}")
+          if "usgs_magnitude_types" not in citations:
+              raise SystemExit("USGS magnitude-type reference is missing")
+
           print(json.dumps(metadata, indent=2, sort_keys=True))
           PY
 
@@ -170,43 +247,39 @@ jobs:
           import json
           from pathlib import Path
 
-          metadata = json.loads(
-              Path("outputs/global-m6-1976-2025/metadata.json").read_text(
-                  encoding="utf-8"
-              )
+          bundle = Path("outputs/global-m6-1976-2025")
+          metadata = json.loads((bundle / "metadata.json").read_text(encoding="utf-8"))
+          interaction = json.loads(
+              (bundle / "interaction_summary.json").read_text(encoding="utf-8")
           )
-          print("# Athena Global Research Bundle v2")
+          print("# Athena Global Research Bundle v3")
           print()
           print(f"- Profile: `{metadata['profile_id']}`")
           print(f"- Window: `{metadata['start_utc']}` to `{metadata['end_utc']}`")
           print(f"- Minimum magnitude: `{metadata['minimum_magnitude']}`")
           print(f"- Catalog events: `{metadata['catalog_event_count']}`")
-          print(
-              "- Fault associations: "
-              f"`{metadata.get('event_fault_association_count', 0)}`"
-          )
-          print(
-              "- Fault GeoJSON features: "
-              f"`{metadata.get('fault_geojson_feature_count', 0)}`"
-          )
-          print(
-              "- PB2002 boundary steps: "
-              f"`{metadata.get('plate_boundary_step_count', 0)}`"
-          )
+          print(f"- Fault associations: `{metadata.get('event_fault_association_count', 0)}`")
+          print(f"- Fault GeoJSON features: `{metadata.get('fault_geojson_feature_count', 0)}`")
+          print(f"- PB2002 boundary steps: `{metadata.get('plate_boundary_step_count', 0)}`")
           print(
               "- Event-to-boundary contexts: "
               f"`{metadata.get('event_plate_boundary_association_count', 0)}`"
           )
-          print("- PB2002 citation: `Bird (2003), DOI 10.1029/2001GC000252`")
+          print(f"- Interaction pairs: `{interaction['pair_count']}`")
+          print(f"- Interaction window observations: `{interaction['window_observation_count']}`")
+          print(f"- Interaction window cells: `{interaction['window_statistic_count']}`")
+          print("- Interaction inference: `descriptive only; no independence assumption`")
+          print("- Moment relation: `Hanks & Kanamori (1979), DOI 10.1029/JB084iB05p02348`")
+          print("- Plate citation: `Bird (2003), DOI 10.1029/2001GC000252`")
           print(f"- Catalog queries: `{metadata['catalog_query_count']}`")
           print("- Scientific mode: retrospective, descriptive, nonpredictive")
-          print("- Durable release tag: `research-global-m6-1976-2025-v2`")
+          print("- Durable release tag: `research-global-m6-1976-2025-v3`")
           PY
 
       - name: Upload temporary workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: athena-global-m6-1976-2025-v2
+          name: athena-global-m6-1976-2025-v3
           path: outputs/global-m6-1976-2025/
           if-no-files-found: error
           retention-days: 30
@@ -214,18 +287,20 @@ jobs:
       - name: Publish durable GitHub release asset
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: research-global-m6-1976-2025-v2
+          RELEASE_TAG: research-global-m6-1976-2025-v3
         run: |
           set -euo pipefail
 
           RELEASE_NOTES=$(cat <<'EOF'
-          Project Athena global research bundle v2 for the complete 1976–2025 calendar-year window, magnitude 6.0 and above.
+          Project Athena global research bundle v3 for the complete 1976–2025 calendar-year window, magnitude 6.0 and above.
 
-          Includes the USGS ComCat catalog, catalog plan, verified GEM active-fault geometry and nearest-fault geographic context, plus Bird PB2002 plate-boundary geometry and event-to-boundary/plate-pair context.
+          Includes the USGS ComCat catalog, verified GEM active-fault context, Bird PB2002 plate-boundary context, and Earthquake Interaction Study v1 prepared artifacts.
 
-          Plate-boundary scientific citation: Bird, P. (2003), An updated digital model of plate boundaries, Geochemistry, Geophysics, Geosystems, 4, 1027. DOI: 10.1029/2001GC000252.
+          Interaction Study v1 measures retrospective M6+ pre/post event association patterns across fixed time and epicentral-distance windows, including same PB2002 plate-pair and same-boundary context. Scalar seismic moment is calculated only for USGS Mw-family preferred magnitude types using Hanks & Kanamori (1979), DOI 10.1029/JB084iB05p02348.
 
-          Scientific scope: retrospective, descriptive, and nonpredictive. Nearest mapped fault and plate-boundary associations are geographic/tectonic context only and are not causal attribution or future-earthquake probabilities.
+          Physical-context citations include Dieterich (1994), King, Stein & Lin (1994), and Brodsky & Prejean (2005). V1 does not implement rate-and-state inversion, Coulomb stress, dynamic wave stress, rupture transfer, or energy-transfer attribution.
+
+          Scientific scope: retrospective, descriptive, and nonpredictive. Overlapping source windows are not treated as independent, so v1 reports no p-values or claims of statistical significance or earthquake causation.
           EOF
           )
 
@@ -238,7 +313,7 @@ jobs:
             gh release create "$RELEASE_TAG" \
               outputs/athena-global-m6-1976-2025.zip \
               outputs/athena-global-m6-1976-2025.zip.sha256 \
-              --title "Athena Global M6+ Research Bundle v2 (1976–2025)" \
+              --title "Athena Global M6+ Research Bundle v3: Interaction Study v1 (1976–2025)" \
               --notes "$RELEASE_NOTES" \
               --target "$GITHUB_SHA"
           fi

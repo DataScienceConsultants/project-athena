@@ -64,6 +64,14 @@ def build_parser() -> argparse.ArgumentParser:
             "(default: 500 km)"
         ),
     )
+    parser.add_argument(
+        "--with-interaction-study",
+        action="store_true",
+        help=(
+            "Generate the retrospective Earthquake Interaction Study v1. "
+            "Requires PB2002 plate-boundary context."
+        ),
+    )
     return parser
 
 
@@ -83,6 +91,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         max_fault_distance_km=args.max_fault_distance_km,
         plate_boundary_steps_path=plate_path,
         max_plate_boundary_distance_km=args.max_plate_boundary_distance_km,
+        interaction_study=args.with_interaction_study,
     )
     print(json.dumps(bundle.metadata, indent=2, allow_nan=False))
 

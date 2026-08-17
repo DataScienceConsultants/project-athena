@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -20,6 +20,18 @@ from src.global_research.fault_index import (
     associate_catalog_events_indexed,
 )
 from src.global_research.faults import load_fault_geojson
+from src.global_research.interaction import (
+    DEFAULT_DISTANCE_WINDOWS_KM,
+    DEFAULT_TIME_WINDOWS_DAYS,
+    INTERACTION_STUDY_ID,
+    InteractionPair,
+    InteractionWindowObservation,
+    build_interaction_pairs,
+    build_interaction_windows,
+    pair_to_record,
+    summarize_interaction_windows,
+    window_to_record,
+)
 from src.global_research.models import (
     FaultAssociation,
     GlobalCatalogPlan,
@@ -38,6 +50,13 @@ from src.global_research.planner import AdaptiveGlobalCatalogPlanner
 from src.global_research.sources import research_source_citation
 
 DEFAULT_OUTPUT_ROOT = Path("data/global_research")
+INTERACTION_METHOD_KEYS = (
+    "usgs_magnitude_types",
+    "hanks_kanamori_1979",
+    "dieterich_1994",
+    "king_stein_lin_1994",
+    "brodsky_prejean_2005",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +73,11 @@ def run_global_research(
     max_fault_distance_km: float = 250.0,
     plate_boundary_steps_path: str | Path | None = None,
     max_plate_boundary_distance_km: float = 500.0,
+    interaction_study: bool = False,
+    interaction_max_lag_days: float = 365.0,
+    interaction_max_distance_km: float = 2000.0,
+    interaction_time_windows_days: tuple[float, ...] = DEFAULT_TIME_WINDOWS_DAYS,
+    interaction_distance_windows_km: tuple[float, ...] = DEFAULT_DISTANCE_WINDOWS_KM,
     counter: Any = None,
     downloader: Any = None,
     generated_at: datetime | None = None,
@@ -61,6 +85,14 @@ def run_global_research(
     """Plan, download, context-enrich, and persist one retrospective cohort."""
     if not isinstance(profile, GlobalResearchProfile):
         raise TypeError("profile must be GlobalResearchProfile.")
+    if not isinstance(interaction_study, bool):
+        raise TypeError("interaction_study must be bool.")
+    if interaction_study and plate_boundary_steps_path is None:
+        raise ValueError(
+            "interaction_study requires PB2002 plate-boundary context so same-plate "
+            "relationships are measured rather than inferred."
+        )
+
     destination = Path(output_dir or DEFAULT_OUTPUT_ROOT / profile.profile_id)
     destination.mkdir(parents=True, exist_ok=True)
 
@@ -77,7 +109,7 @@ def run_global_research(
 
     source_citations = [research_source_citation("catalogs", "usgs_comcat")]
     metadata: dict[str, Any] = {
-        "bundle_schema_version": 2,
+        "bundle_schema_version": 3 if interaction_study else 2,
         "profile_id": profile.profile_id,
         "start_utc": _utc_string(profile.start_time),
         "end_utc": _utc_string(profile.end_time),
@@ -89,6 +121,7 @@ def run_global_research(
         "catalog_preflight_expected_event_count": plan.expected_event_count,
         "fault_context_included": fault_geojson_path is not None,
         "plate_boundary_context_included": plate_boundary_steps_path is not None,
+        "interaction_study_included": interaction_study,
         "research_mode": "retrospective_global",
         "report_is_nonpredictive": True,
         "source_citations": source_citations,
@@ -124,6 +157,7 @@ def run_global_research(
             ),
         )
 
+    plate_associations: tuple[PlateBoundaryAssociation, ...] = ()
     if plate_boundary_steps_path is not None:
         steps_text = Path(plate_boundary_steps_path).read_text(encoding="utf-8")
         plate_steps = parse_pb2002_steps(steps_text)
@@ -165,6 +199,84 @@ def run_global_research(
                 "distance. Adjacent plates and boundary class are source-defined "
                 "tectonic context, not causal attribution or future-earthquake "
                 "probability."
+            ),
+        )
+
+    if interaction_study:
+        interaction_pairs = build_interaction_pairs(
+            catalog.events,
+            plate_associations,
+            minimum_magnitude=profile.minimum_magnitude,
+            max_lag_days=interaction_max_lag_days,
+            max_distance_km=interaction_max_distance_km,
+        )
+        interaction_windows = build_interaction_windows(
+            catalog.events,
+            plate_associations,
+            profile_start=profile.start_time,
+            profile_end=profile.end_time,
+            minimum_magnitude=profile.minimum_magnitude,
+            time_windows_days=interaction_time_windows_days,
+            distance_windows_km=interaction_distance_windows_km,
+        )
+        interaction_summary = summarize_interaction_windows(interaction_windows)
+        method_citations = [
+            research_source_citation("methods", key) for key in INTERACTION_METHOD_KEYS
+        ]
+        source_citations.extend(method_citations)
+        interaction_summary.update(
+            profile_id=profile.profile_id,
+            catalog_minimum_magnitude=profile.minimum_magnitude,
+            pair_count=len(interaction_pairs),
+            window_observation_count=len(interaction_windows),
+            maximum_pair_lag_days=float(interaction_max_lag_days),
+            maximum_pair_distance_km=float(interaction_max_distance_km),
+            time_windows_days=[float(value) for value in interaction_time_windows_days],
+            distance_windows_km=[
+                float(value) for value in interaction_distance_windows_km
+            ],
+            source_citations=method_citations,
+            limitations=[
+                "The frozen cohort contains M6.0+ earthquakes only; it does not "
+                "represent ordinary lower-magnitude aftershock populations.",
+                "Distances are epicentral great-circle distances, not rupture-to-rupture "
+                "or along-boundary propagation distances.",
+                "PB2002 relationships are nearest mapped tectonic context and do not "
+                "establish earthquake causality.",
+                "V1 does not calculate Coulomb stress changes, dynamic wave stresses, "
+                "rupture geometry, slip transfer, or receiver-fault loading.",
+                "Overlapping source-event windows are statistically dependent; V1 "
+                "therefore reports descriptive pre/post counts without p-values.",
+                "Scalar seismic moment is calculated only for USGS Mw-family preferred "
+                "magnitude types and is a source-size variable, not transferred energy.",
+            ],
+        )
+        _write_interaction_pairs(
+            destination / "interaction_pairs.csv", interaction_pairs
+        )
+        _write_interaction_windows(
+            destination / "interaction_windows.csv", interaction_windows
+        )
+        _write_json(destination / "interaction_summary.json", interaction_summary)
+        metadata.update(
+            interaction_study_id=INTERACTION_STUDY_ID,
+            interaction_pair_count=len(interaction_pairs),
+            interaction_window_observation_count=len(interaction_windows),
+            interaction_summary_included=True,
+            interaction_inference_status=interaction_summary["inference_status"],
+            interaction_time_windows_days=[
+                float(value) for value in interaction_time_windows_days
+            ],
+            interaction_distance_windows_km=[
+                float(value) for value in interaction_distance_windows_km
+            ],
+            interaction_max_pair_lag_days=float(interaction_max_lag_days),
+            interaction_max_pair_distance_km=float(interaction_max_distance_km),
+            interaction_semantics=(
+                "Retrospective descriptive pre/post association study. Same plate pair, "
+                "same boundary, distance, timing, and scalar seismic moment are context "
+                "variables only; no causal triggering, stress-transfer, energy-transfer, "
+                "or future-earthquake probability is inferred."
             ),
         )
 
@@ -290,3 +402,37 @@ def _write_plate_boundary_associations(
                     "source": item.source,
                 }
             )
+
+
+def _write_interaction_pairs(
+    path: Path,
+    pairs: tuple[InteractionPair, ...],
+) -> None:
+    fieldnames = tuple(field.name for field in fields(InteractionPair))
+    _write_records(path, fieldnames, (pair_to_record(pair) for pair in pairs))
+
+
+def _write_interaction_windows(
+    path: Path,
+    observations: tuple[InteractionWindowObservation, ...],
+) -> None:
+    fieldnames = tuple(field.name for field in fields(InteractionWindowObservation)) + (
+        "edge_eligible",
+        "source_has_plate_context",
+    )
+    _write_records(
+        path,
+        fieldnames,
+        (window_to_record(observation) for observation in observations),
+    )
+
+
+def _write_records(
+    path: Path,
+    fieldnames: tuple[str, ...],
+    records: Any,
+) -> None:
+    with path.open("w", newline="", encoding="utf-8") as target:
+        writer = csv.DictWriter(target, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(records)
