@@ -22,6 +22,7 @@ from src.global_research.fault_index import (
 from src.global_research.faults import load_fault_geojson
 from src.global_research.interaction import (
     DEFAULT_DISTANCE_WINDOWS_KM,
+    DEFAULT_SOURCE_MAGNITUDE_THRESHOLDS,
     DEFAULT_TIME_WINDOWS_DAYS,
     INTERACTION_STUDY_ID,
     InteractionPair,
@@ -78,6 +79,9 @@ def run_global_research(
     interaction_max_distance_km: float = 2000.0,
     interaction_time_windows_days: tuple[float, ...] = DEFAULT_TIME_WINDOWS_DAYS,
     interaction_distance_windows_km: tuple[float, ...] = DEFAULT_DISTANCE_WINDOWS_KM,
+    interaction_source_magnitude_thresholds: tuple[float, ...] = (
+        DEFAULT_SOURCE_MAGNITUDE_THRESHOLDS
+    ),
     counter: Any = None,
     downloader: Any = None,
     generated_at: datetime | None = None,
@@ -109,7 +113,7 @@ def run_global_research(
 
     source_citations = [research_source_citation("catalogs", "usgs_comcat")]
     metadata: dict[str, Any] = {
-        "bundle_schema_version": 3 if interaction_study else 2,
+        "bundle_schema_version": 4 if interaction_study else 2,
         "profile_id": profile.profile_id,
         "start_utc": _utc_string(profile.start_time),
         "end_utc": _utc_string(profile.end_time),
@@ -219,7 +223,10 @@ def run_global_research(
             time_windows_days=interaction_time_windows_days,
             distance_windows_km=interaction_distance_windows_km,
         )
-        interaction_summary = summarize_interaction_windows(interaction_windows)
+        interaction_summary = summarize_interaction_windows(
+            interaction_windows,
+            source_magnitude_thresholds=interaction_source_magnitude_thresholds,
+        )
         method_citations = [
             research_source_citation("methods", key) for key in INTERACTION_METHOD_KEYS
         ]
@@ -243,10 +250,13 @@ def run_global_research(
                 "or along-boundary propagation distances.",
                 "PB2002 relationships are nearest mapped tectonic context and do not "
                 "establish earthquake causality.",
-                "V1 does not calculate Coulomb stress changes, dynamic wave stresses, "
+                "V1.1 does not calculate Coulomb stress changes, dynamic wave stresses, "
                 "rupture geometry, slip transfer, or receiver-fault loading.",
-                "Overlapping source-event windows are statistically dependent; V1 "
+                "Overlapping source-event windows are statistically dependent; V1.1 "
                 "therefore reports descriptive pre/post counts without p-values.",
+                "The unstratified all-M6+ aggregate is pair-symmetric because the same "
+                "catalog acts as both source and target population; directional "
+                "interpretation uses larger-source magnitude strata instead.",
                 "Scalar seismic moment is calculated only for USGS Mw-family preferred "
                 "magnitude types and is a source-size variable, not transferred energy.",
             ],
@@ -260,6 +270,7 @@ def run_global_research(
         _write_json(destination / "interaction_summary.json", interaction_summary)
         metadata.update(
             interaction_study_id=INTERACTION_STUDY_ID,
+            interaction_analysis_schema_version=interaction_summary["schema_version"],
             interaction_pair_count=len(interaction_pairs),
             interaction_window_observation_count=len(interaction_windows),
             interaction_summary_included=True,
@@ -270,13 +281,23 @@ def run_global_research(
             interaction_distance_windows_km=[
                 float(value) for value in interaction_distance_windows_km
             ],
+            interaction_source_magnitude_thresholds=[
+                float(value) for value in interaction_source_magnitude_thresholds
+            ],
+            interaction_source_magnitude_statistic_count=interaction_summary[
+                "source_magnitude_statistic_count"
+            ],
+            interaction_annular_statistic_count=interaction_summary[
+                "annular_statistic_count"
+            ],
             interaction_max_pair_lag_days=float(interaction_max_lag_days),
             interaction_max_pair_distance_km=float(interaction_max_distance_km),
             interaction_semantics=(
-                "Retrospective descriptive pre/post association study. Same plate pair, "
-                "same boundary, distance, timing, and scalar seismic moment are context "
-                "variables only; no causal triggering, stress-transfer, energy-transfer, "
-                "or future-earthquake probability is inferred."
+                "Retrospective descriptive pre/post association study. Source-magnitude "
+                "strata, same plate pair, same boundary, distance, timing, and scalar "
+                "seismic moment are context variables only; no causal triggering, "
+                "stress-transfer, energy-transfer, or future-earthquake probability "
+                "is inferred."
             ),
         )
 
