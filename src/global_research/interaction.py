@@ -11,6 +11,7 @@ import math
 from bisect import bisect_left, bisect_right
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
+from statistics import median
 from typing import Any, Iterable
 
 from src.catalog.models import CatalogEvent
@@ -20,7 +21,8 @@ from src.spatial.distance import haversine_distance
 MOMENT_MAGNITUDE_TYPES = frozenset({"mw", "mww", "mwc", "mwb", "mwr", "mwp"})
 DEFAULT_TIME_WINDOWS_DAYS = (1.0, 7.0, 30.0, 90.0, 365.0)
 DEFAULT_DISTANCE_WINDOWS_KM = (100.0, 250.0, 500.0, 1000.0, 2000.0)
-INTERACTION_STUDY_ID = "global-m6-1976-2025-interaction-v1"
+DEFAULT_SOURCE_MAGNITUDE_THRESHOLDS = (7.0, 7.5, 8.0)
+INTERACTION_STUDY_ID = "global-m6-1976-2025-interaction-v1-1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -309,43 +311,63 @@ def build_interaction_windows(
 
 def summarize_interaction_windows(
     observations: Iterable[InteractionWindowObservation],
+    *,
+    source_magnitude_thresholds: Iterable[float] = DEFAULT_SOURCE_MAGNITUDE_THRESHOLDS,
 ) -> dict[str, Any]:
-    """Aggregate edge-complete pre/post counts as descriptive, noninferential statistics."""
+    """Summarize edge-complete windows without making inferential claims.
+
+    The all-source aggregate is retained for continuity but is pair-symmetric
+    when source and target cohorts are identical. Directional interpretation
+    should use the source-magnitude-stratified and annular summaries.
+    """
     rows = tuple(observations)
     if not all(isinstance(row, InteractionWindowObservation) for row in rows):
-        raise TypeError("observations must contain InteractionWindowObservation objects.")
+        raise TypeError(
+            "observations must contain InteractionWindowObservation objects."
+        )
+    thresholds = _positive_windows(
+        source_magnitude_thresholds, "source_magnitude_thresholds"
+    )
 
-    keys = sorted({(row.time_window_days, row.distance_window_km) for row in rows})
-    statistics = []
-    for time_window, distance_window in keys:
-        eligible = [
-            row
-            for row in rows
-            if row.time_window_days == time_window
-            and row.distance_window_km == distance_window
-            and row.edge_eligible
-        ]
-        plate_eligible = [row for row in eligible if row.source_has_plate_context]
-        statistics.append(
-            {
-                "time_window_days": time_window,
-                "distance_window_km": distance_window,
-                "eligible_source_count": len(eligible),
-                "plate_context_source_count": len(plate_eligible),
-                **_count_summary(eligible, "all"),
-                **_count_summary(plate_eligible, "same_plate_pair"),
-                **_count_summary(plate_eligible, "same_boundary"),
-            }
+    statistics = _cumulative_statistics(rows)
+    stratified_statistics: list[dict[str, Any]] = []
+    annular_statistics: list[dict[str, Any]] = []
+
+    for threshold in thresholds:
+        threshold_rows = tuple(
+            row for row in rows if row.source_magnitude >= threshold
+        )
+        threshold_statistics = _cumulative_statistics(threshold_rows)
+        for statistic in threshold_statistics:
+            stratified_statistics.append(
+                {
+                    "source_minimum_magnitude": threshold,
+                    **statistic,
+                }
+            )
+        annular_statistics.extend(
+            _annular_statistics(threshold_statistics, threshold)
         )
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "study_id": INTERACTION_STUDY_ID,
         "research_mode": "retrospective_descriptive",
         "inference_status": "descriptive_only_no_independence_assumption",
         "report_is_nonpredictive": True,
+        "aggregate_interpretation_warning": (
+            "When the source and target cohorts are the same M6+ catalog, "
+            "all-source aggregate pre/post pair counts are approximately symmetric "
+            "by construction. Use source-magnitude-stratified and annular statistics "
+            "for directional source-size comparisons."
+        ),
+        "source_magnitude_thresholds": list(thresholds),
         "window_statistic_count": len(statistics),
+        "source_magnitude_statistic_count": len(stratified_statistics),
+        "annular_statistic_count": len(annular_statistics),
         "statistics": statistics,
+        "source_magnitude_statistics": stratified_statistics,
+        "annular_statistics": annular_statistics,
     }
 
 
@@ -364,6 +386,80 @@ def window_to_record(observation: InteractionWindowObservation) -> dict[str, Any
     record["edge_eligible"] = observation.edge_eligible
     record["source_has_plate_context"] = observation.source_has_plate_context
     return record
+
+
+def _cumulative_statistics(
+    rows: tuple[InteractionWindowObservation, ...],
+) -> list[dict[str, Any]]:
+    keys = sorted(
+        {(row.time_window_days, row.distance_window_km) for row in rows}
+    )
+    statistics: list[dict[str, Any]] = []
+    for time_window, distance_window in keys:
+        eligible = [
+            row
+            for row in rows
+            if row.time_window_days == time_window
+            and row.distance_window_km == distance_window
+            and row.edge_eligible
+        ]
+        plate_eligible = [
+            row for row in eligible if row.source_has_plate_context
+        ]
+        statistics.append(
+            {
+                "time_window_days": time_window,
+                "distance_window_km": distance_window,
+                "eligible_source_count": len(eligible),
+                "plate_context_source_count": len(plate_eligible),
+                **_count_summary(eligible, "all"),
+                **_count_summary(plate_eligible, "same_plate_pair"),
+                **_count_summary(plate_eligible, "same_boundary"),
+            }
+        )
+    return statistics
+
+
+def _annular_statistics(
+    cumulative_statistics: list[dict[str, Any]],
+    source_minimum_magnitude: float,
+) -> list[dict[str, Any]]:
+    """Convert cumulative distance windows into non-overlapping distance rings."""
+    by_time: dict[float, list[dict[str, Any]]] = {}
+    for statistic in cumulative_statistics:
+        by_time.setdefault(float(statistic["time_window_days"]), []).append(statistic)
+
+    result: list[dict[str, Any]] = []
+    for time_window in sorted(by_time):
+        previous: dict[str, Any] | None = None
+        lower_distance = 0.0
+        for current in sorted(
+            by_time[time_window],
+            key=lambda item: float(item["distance_window_km"]),
+        ):
+            upper_distance = float(current["distance_window_km"])
+            annulus = {
+                "source_minimum_magnitude": source_minimum_magnitude,
+                "time_window_days": time_window,
+                "lower_distance_km": lower_distance,
+                "upper_distance_km": upper_distance,
+                "eligible_source_count": current["eligible_source_count"],
+                "plate_context_source_count": current["plate_context_source_count"],
+            }
+            for relationship in ("all", "same_plate_pair", "same_boundary"):
+                pre_key = f"pre_{relationship}_count"
+                post_key = f"post_{relationship}_count"
+                previous_pre = 0 if previous is None else int(previous[pre_key])
+                previous_post = 0 if previous is None else int(previous[post_key])
+                pre = int(current[pre_key]) - previous_pre
+                post = int(current[post_key]) - previous_post
+                annulus.update(
+                    _count_summary_from_totals(pre, post, relationship)
+                )
+            result.append(annulus)
+            previous = current
+            lower_distance = upper_distance
+    return result
 
 
 def _eligible_events(
@@ -386,9 +482,13 @@ def _plate_context_map(
     result: dict[str, PlateBoundaryAssociation] = {}
     for association in associations:
         if not isinstance(association, PlateBoundaryAssociation):
-            raise TypeError("plate_associations must contain PlateBoundaryAssociation objects.")
+            raise TypeError(
+                "plate_associations must contain PlateBoundaryAssociation objects."
+            )
         if association.event_id in result:
-            raise ValueError(f"Duplicate plate context for event: {association.event_id}")
+            raise ValueError(
+                f"Duplicate plate context for event: {association.event_id}"
+            )
         result[association.event_id] = association
     return result
 
@@ -397,20 +497,63 @@ def _count_summary(
     rows: Iterable[InteractionWindowObservation], relationship: str
 ) -> dict[str, Any]:
     data = tuple(rows)
+    pre_values, post_values, prefix = _relationship_values(data, relationship)
+    pre = sum(pre_values)
+    post = sum(post_values)
+    differences = [
+        post_value - pre_value
+        for pre_value, post_value in zip(pre_values, post_values, strict=True)
+    ]
+    return {
+        **_count_summary_from_totals(pre, post, prefix),
+        f"mean_post_minus_pre_{prefix}": (
+            None if not differences else sum(differences) / len(differences)
+        ),
+        f"median_post_minus_pre_{prefix}": (
+            None if not differences else float(median(differences))
+        ),
+        f"source_post_gt_pre_{prefix}_count": sum(
+            difference > 0 for difference in differences
+        ),
+        f"source_post_eq_pre_{prefix}_count": sum(
+            difference == 0 for difference in differences
+        ),
+        f"source_post_lt_pre_{prefix}_count": sum(
+            difference < 0 for difference in differences
+        ),
+    }
+
+
+def _relationship_values(
+    rows: tuple[InteractionWindowObservation, ...],
+    relationship: str,
+) -> tuple[list[int], list[int], str]:
     if relationship == "all":
-        pre = sum(row.pre_count_all for row in data)
-        post = sum(row.post_count_all for row in data)
-        prefix = "all"
-    elif relationship == "same_plate_pair":
-        pre = sum(row.pre_count_same_plate_pair for row in data)
-        post = sum(row.post_count_same_plate_pair for row in data)
-        prefix = "same_plate_pair"
-    elif relationship == "same_boundary":
-        pre = sum(row.pre_count_same_boundary for row in data)
-        post = sum(row.post_count_same_boundary for row in data)
-        prefix = "same_boundary"
-    else:
-        raise ValueError(f"Unknown relationship: {relationship}")
+        return (
+            [row.pre_count_all for row in rows],
+            [row.post_count_all for row in rows],
+            "all",
+        )
+    if relationship == "same_plate_pair":
+        return (
+            [row.pre_count_same_plate_pair for row in rows],
+            [row.post_count_same_plate_pair for row in rows],
+            "same_plate_pair",
+        )
+    if relationship == "same_boundary":
+        return (
+            [row.pre_count_same_boundary for row in rows],
+            [row.post_count_same_boundary for row in rows],
+            "same_boundary",
+        )
+    raise ValueError(f"Unknown relationship: {relationship}")
+
+
+def _count_summary_from_totals(
+    pre: int,
+    post: int,
+    prefix: str,
+) -> dict[str, Any]:
     return {
         f"pre_{prefix}_count": pre,
         f"post_{prefix}_count": post,
