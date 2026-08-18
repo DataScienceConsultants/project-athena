@@ -398,6 +398,20 @@ def _validate_projection_for_graph(
         or projection.boundary_class != step.boundary_class
     ):
         raise ValueError("projection tectonic fields do not match its graph step.")
+    if not math.isclose(
+        projection.distance_from_start_km + projection.distance_to_end_km,
+        step.length_km,
+        rel_tol=1e-9,
+        abs_tol=1e-6,
+    ):
+        raise ValueError("projection along-step distances do not match step length.")
+    if not math.isclose(
+        projection.distance_from_start_km,
+        projection.fraction_from_start * step.length_km,
+        rel_tol=1e-9,
+        abs_tol=1e-6,
+    ):
+        raise ValueError("projection fraction does not match its along-step distance.")
 
 
 def _component_count(
