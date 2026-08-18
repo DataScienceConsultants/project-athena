@@ -79,7 +79,11 @@ def test_interaction_pairs_preserve_plate_relationships_and_missing_context():
         max_lag_days=7,
         max_distance_km=200,
     )
-    source_pairs = {pair.target_event_id: pair for pair in pairs if pair.source_event_id == "source"}
+    source_pairs = {
+        pair.target_event_id: pair
+        for pair in pairs
+        if pair.source_event_id == "source"
+    }
 
     assert set(source_pairs) == {"same", "missing"}
     assert source_pairs["same"].same_plate_pair is True
@@ -137,7 +141,7 @@ def test_windows_mark_catalog_edges_ineligible_instead_of_using_partial_baseline
     assert edge.edge_eligible is False
 
 
-def test_summary_is_descriptive_and_uses_only_edge_complete_sources():
+def test_summary_is_descriptive_and_flags_all_source_pair_symmetry():
     events = (
         event("pre", 9, longitude=-0.4),
         event("source", 10, longitude=0.0),
@@ -152,11 +156,84 @@ def test_summary_is_descriptive_and_uses_only_edge_complete_sources():
         distance_windows_km=(100,),
     )
 
-    summary = summarize_interaction_windows(observations)
+    summary = summarize_interaction_windows(
+        observations,
+        source_magnitude_thresholds=(7.0,),
+    )
     statistic = summary["statistics"][0]
 
+    assert summary["schema_version"] == 2
     assert summary["report_is_nonpredictive"] is True
     assert summary["inference_status"] == "descriptive_only_no_independence_assumption"
+    assert "symmetric" in summary["aggregate_interpretation_warning"]
     assert statistic["eligible_source_count"] == 3
     assert statistic["pre_all_count"] == statistic["post_all_count"]
     assert statistic["post_minus_pre_same_plate_pair"] == 0
+    assert summary["source_magnitude_statistics"] == []
+    assert summary["annular_statistics"] == []
+
+
+def test_stratified_summary_breaks_pair_symmetry_and_reports_event_direction():
+    events = (
+        event("pre", 9, longitude=0.2),
+        event("large", 10, longitude=0.0, magnitude=8.1),
+        event("post-near", 11, longitude=0.2),
+        event("post-mid", 11, longitude=1.5),
+    )
+    observations = build_interaction_windows(
+        events,
+        tuple(context(item.event_id) for item in events),
+        profile_start=datetime(2020, 1, 1, tzinfo=UTC),
+        profile_end=datetime(2020, 2, 1, tzinfo=UTC),
+        time_windows_days=(2,),
+        distance_windows_km=(100.0, 250.0),
+    )
+
+    summary = summarize_interaction_windows(
+        observations,
+        source_magnitude_thresholds=(8.0,),
+    )
+    stratified = {
+        item["distance_window_km"]: item
+        for item in summary["source_magnitude_statistics"]
+    }
+
+    at_250 = stratified[250.0]
+    assert at_250["eligible_source_count"] == 1
+    assert at_250["pre_all_count"] == 1
+    assert at_250["post_all_count"] == 2
+    assert at_250["post_pre_all_ratio"] == 2.0
+    assert at_250["source_post_gt_pre_all_count"] == 1
+    assert at_250["median_post_minus_pre_all"] == 1.0
+
+
+def test_annular_summary_subtracts_cumulative_distance_windows():
+    events = (
+        event("pre", 9, longitude=0.2),
+        event("large", 10, longitude=0.0, magnitude=8.1),
+        event("post-near", 11, longitude=0.2),
+        event("post-mid", 11, longitude=1.5),
+    )
+    observations = build_interaction_windows(
+        events,
+        tuple(context(item.event_id) for item in events),
+        profile_start=datetime(2020, 1, 1, tzinfo=UTC),
+        profile_end=datetime(2020, 2, 1, tzinfo=UTC),
+        time_windows_days=(2,),
+        distance_windows_km=(100.0, 250.0),
+    )
+
+    summary = summarize_interaction_windows(
+        observations,
+        source_magnitude_thresholds=(8.0,),
+    )
+    annuli = summary["annular_statistics"]
+
+    inner = next(item for item in annuli if item["upper_distance_km"] == 100.0)
+    outer = next(item for item in annuli if item["lower_distance_km"] == 100.0)
+    assert inner["pre_all_count"] == 1
+    assert inner["post_all_count"] == 1
+    assert outer["pre_all_count"] == 0
+    assert outer["post_all_count"] == 1
+    assert outer["post_pre_all_ratio"] is None
+    assert outer["post_same_boundary_count"] == 1
