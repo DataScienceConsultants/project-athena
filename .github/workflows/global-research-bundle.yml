@@ -70,7 +70,7 @@ jobs:
 
           metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
           expected = {
-              "bundle_schema_version": 3,
+              "bundle_schema_version": 4,
               "profile_id": "global-m6-1976-2025",
               "start_utc": "1976-01-01T00:00:00Z",
               "end_utc": "2026-01-01T00:00:00Z",
@@ -84,11 +84,14 @@ jobs:
               "plate_boundary_step_count": 5819,
               "plate_boundary_geojson_feature_count": 5819,
               "interaction_study_included": True,
-              "interaction_study_id": "global-m6-1976-2025-interaction-v1",
+              "interaction_study_id": "global-m6-1976-2025-interaction-v1-1",
+              "interaction_analysis_schema_version": 2,
               "interaction_summary_included": True,
               "interaction_inference_status": (
                   "descriptive_only_no_independence_assumption"
               ),
+              "interaction_source_magnitude_statistic_count": 75,
+              "interaction_annular_statistic_count": 75,
           }
           for key, value in expected.items():
               if metadata.get(key) != value:
@@ -96,7 +99,9 @@ jobs:
                       f"Unexpected metadata {key}: {metadata.get(key)!r}; expected {value!r}"
                   )
 
-          if metadata.get("interaction_time_windows_days") != [1.0, 7.0, 30.0, 90.0, 365.0]:
+          if metadata.get("interaction_time_windows_days") != [
+              1.0, 7.0, 30.0, 90.0, 365.0
+          ]:
               raise SystemExit("Unexpected interaction time windows")
           if metadata.get("interaction_distance_windows_km") != [
               100.0,
@@ -106,6 +111,12 @@ jobs:
               2000.0,
           ]:
               raise SystemExit("Unexpected interaction distance windows")
+          if metadata.get("interaction_source_magnitude_thresholds") != [
+              7.0,
+              7.5,
+              8.0,
+          ]:
+              raise SystemExit("Unexpected interaction source-magnitude thresholds")
           if "no causal triggering" not in metadata.get("interaction_semantics", ""):
               raise SystemExit("Interaction semantics lost noncausal language")
 
@@ -172,8 +183,8 @@ jobs:
               interaction_summary_path.read_text(encoding="utf-8")
           )
           summary_expected = {
-              "schema_version": 1,
-              "study_id": "global-m6-1976-2025-interaction-v1",
+              "schema_version": 2,
+              "study_id": "global-m6-1976-2025-interaction-v1-1",
               "profile_id": "global-m6-1976-2025",
               "catalog_minimum_magnitude": 6.0,
               "research_mode": "retrospective_descriptive",
@@ -182,6 +193,8 @@ jobs:
               "pair_count": interaction_pair_count,
               "window_observation_count": interaction_window_count,
               "window_statistic_count": 25,
+              "source_magnitude_statistic_count": 75,
+              "annular_statistic_count": 75,
           }
           for key, value in summary_expected.items():
               if interaction_summary.get(key) != value:
@@ -189,14 +202,50 @@ jobs:
                       f"Unexpected interaction summary {key}: "
                       f"{interaction_summary.get(key)!r}; expected {value!r}"
                   )
-          if len(interaction_summary.get("limitations", [])) < 6:
+
+          if interaction_summary.get("source_magnitude_thresholds") != [7.0, 7.5, 8.0]:
+              raise SystemExit("Interaction summary lost source-magnitude thresholds")
+          warning = interaction_summary.get("aggregate_interpretation_warning", "")
+          if "symmetric" not in warning or "source-magnitude" not in warning:
+              raise SystemExit("Interaction summary lost pair-symmetry warning")
+          if len(interaction_summary.get("limitations", [])) < 7:
               raise SystemExit("Interaction summary is missing required limitations")
+
           statistics = interaction_summary.get("statistics")
           if not isinstance(statistics, list) or len(statistics) != 25:
               raise SystemExit("Interaction summary must contain all 25 window cells")
           for statistic in statistics:
               if statistic.get("eligible_source_count", 0) <= 0:
                   raise SystemExit("An interaction window has no edge-complete sources")
+
+          stratified = interaction_summary.get("source_magnitude_statistics")
+          if not isinstance(stratified, list) or len(stratified) != 75:
+              raise SystemExit(
+                  "Interaction summary must contain 75 source-magnitude cells"
+              )
+          annular = interaction_summary.get("annular_statistics")
+          if not isinstance(annular, list) or len(annular) != 75:
+              raise SystemExit("Interaction summary must contain 75 annular cells")
+
+          for threshold in (7.0, 7.5, 8.0):
+              threshold_cells = [
+                  item
+                  for item in stratified
+                  if item.get("source_minimum_magnitude") == threshold
+              ]
+              if len(threshold_cells) != 25:
+                  raise SystemExit(
+                      f"Unexpected source-magnitude cell count for M{threshold}+"
+                  )
+              annular_cells = [
+                  item
+                  for item in annular
+                  if item.get("source_minimum_magnitude") == threshold
+              ]
+              if len(annular_cells) != 25:
+                  raise SystemExit(
+                      f"Unexpected annular cell count for M{threshold}+"
+                  )
 
           citations = {
               item.get("source_key"): item
@@ -226,7 +275,9 @@ jobs:
           for key, doi in expected_method_dois.items():
               citation = (citations.get(key) or {}).get("citation") or {}
               if citation.get("doi") != doi:
-                  raise SystemExit(f"Interaction-method DOI is missing or incorrect: {key}")
+                  raise SystemExit(
+                      f"Interaction-method DOI is missing or incorrect: {key}"
+                  )
           if "usgs_magnitude_types" not in citations:
               raise SystemExit("USGS magnitude-type reference is missing")
 
@@ -252,34 +303,72 @@ jobs:
           interaction = json.loads(
               (bundle / "interaction_summary.json").read_text(encoding="utf-8")
           )
-          print("# Athena Global Research Bundle v3")
+          m8_1d_250 = next(
+              item
+              for item in interaction["source_magnitude_statistics"]
+              if item["source_minimum_magnitude"] == 8.0
+              and item["time_window_days"] == 1.0
+              and item["distance_window_km"] == 250.0
+          )
+
+          print("# Athena Global Research Bundle v4")
           print()
           print(f"- Profile: `{metadata['profile_id']}`")
           print(f"- Window: `{metadata['start_utc']}` to `{metadata['end_utc']}`")
           print(f"- Minimum magnitude: `{metadata['minimum_magnitude']}`")
           print(f"- Catalog events: `{metadata['catalog_event_count']}`")
-          print(f"- Fault associations: `{metadata.get('event_fault_association_count', 0)}`")
-          print(f"- Fault GeoJSON features: `{metadata.get('fault_geojson_feature_count', 0)}`")
-          print(f"- PB2002 boundary steps: `{metadata.get('plate_boundary_step_count', 0)}`")
+          print(
+              f"- Fault associations: "
+              f"`{metadata.get('event_fault_association_count', 0)}`"
+          )
+          print(
+              f"- Fault GeoJSON features: "
+              f"`{metadata.get('fault_geojson_feature_count', 0)}`"
+          )
+          print(
+              f"- PB2002 boundary steps: "
+              f"`{metadata.get('plate_boundary_step_count', 0)}`"
+          )
           print(
               "- Event-to-boundary contexts: "
               f"`{metadata.get('event_plate_boundary_association_count', 0)}`"
           )
           print(f"- Interaction pairs: `{interaction['pair_count']}`")
-          print(f"- Interaction window observations: `{interaction['window_observation_count']}`")
-          print(f"- Interaction window cells: `{interaction['window_statistic_count']}`")
-          print("- Interaction inference: `descriptive only; no independence assumption`")
-          print("- Moment relation: `Hanks & Kanamori (1979), DOI 10.1029/JB084iB05p02348`")
+          print(
+              f"- Interaction window observations: "
+              f"`{interaction['window_observation_count']}`"
+          )
+          print(
+              f"- Source-magnitude cells: "
+              f"`{interaction['source_magnitude_statistic_count']}`"
+          )
+          print(f"- Distance-annulus cells: `{interaction['annular_statistic_count']}`")
+          print(
+              "- M8+ / 1 day / 250 km descriptive post:pre ratio: "
+              f"`{m8_1d_250['post_pre_all_ratio']}`"
+          )
+          print(
+              "- Interaction inference: "
+              "`descriptive only; no independence assumption`"
+          )
+          print(
+              "- Pair-symmetry correction: "
+              "`directional interpretation uses M7+/M7.5+/M8+ source strata`"
+          )
+          print(
+              "- Moment relation: "
+              "`Hanks & Kanamori (1979), DOI 10.1029/JB084iB05p02348`"
+          )
           print("- Plate citation: `Bird (2003), DOI 10.1029/2001GC000252`")
           print(f"- Catalog queries: `{metadata['catalog_query_count']}`")
           print("- Scientific mode: retrospective, descriptive, nonpredictive")
-          print("- Durable release tag: `research-global-m6-1976-2025-v3`")
+          print("- Durable release tag: `research-global-m6-1976-2025-v4`")
           PY
 
       - name: Upload temporary workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: athena-global-m6-1976-2025-v3
+          name: athena-global-m6-1976-2025-v4
           path: outputs/global-m6-1976-2025/
           if-no-files-found: error
           retention-days: 30
@@ -287,20 +376,22 @@ jobs:
       - name: Publish durable GitHub release asset
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: research-global-m6-1976-2025-v3
+          RELEASE_TAG: research-global-m6-1976-2025-v4
         run: |
           set -euo pipefail
 
           RELEASE_NOTES=$(cat <<'EOF'
-          Project Athena global research bundle v3 for the complete 1976–2025 calendar-year window, magnitude 6.0 and above.
+          Project Athena global research bundle v4 for the complete 1976–2025 calendar-year window, magnitude 6.0 and above.
 
-          Includes the USGS ComCat catalog, verified GEM active-fault context, Bird PB2002 plate-boundary context, and Earthquake Interaction Study v1 prepared artifacts.
+          Includes the USGS ComCat catalog, verified GEM active-fault context, Bird PB2002 plate-boundary context, and Earthquake Interaction Study v1.1 prepared artifacts.
 
-          Interaction Study v1 measures retrospective M6+ pre/post event association patterns across fixed time and epicentral-distance windows, including same PB2002 plate-pair and same-boundary context. Scalar seismic moment is calculated only for USGS Mw-family preferred magnitude types using Hanks & Kanamori (1979), DOI 10.1029/JB084iB05p02348.
+          V1.1 preserves the v3 pair/window data model but corrects interpretation of the all-M6+ aggregate: because the same M6+ cohort acts as both source and target population, all-source pre/post pair totals are approximately symmetric by construction. Directional descriptive analysis is therefore reported for M7+, M7.5+, and M8+ source strata.
 
-          Physical-context citations include Dieterich (1994), King, Stein & Lin (1994), and Brodsky & Prejean (2005). V1 does not implement rate-and-state inversion, Coulomb stress, dynamic wave stress, rupture transfer, or energy-transfer attribution.
+          V1.1 also converts cumulative distance windows into non-overlapping 0–100, 100–250, 250–500, 500–1,000, and 1,000–2,000 km annuli. This helps distinguish near-source clustering from broader spatial association.
 
-          Scientific scope: retrospective, descriptive, and nonpredictive. Overlapping source windows are not treated as independent, so v1 reports no p-values or claims of statistical significance or earthquake causation.
+          Scalar seismic moment is calculated only for USGS Mw-family preferred magnitude types using Hanks & Kanamori (1979), DOI 10.1029/JB084iB05p02348. Physical-context citations include Dieterich (1994), King, Stein & Lin (1994), and Brodsky & Prejean (2005).
+
+          Scientific scope remains retrospective, descriptive, and nonpredictive. V1.1 does not implement rate-and-state inversion, Coulomb stress, dynamic wave stress, rupture transfer, energy-transfer attribution, p-values, or causal earthquake claims.
           EOF
           )
 
@@ -313,7 +404,7 @@ jobs:
             gh release create "$RELEASE_TAG" \
               outputs/athena-global-m6-1976-2025.zip \
               outputs/athena-global-m6-1976-2025.zip.sha256 \
-              --title "Athena Global M6+ Research Bundle v3: Interaction Study v1 (1976–2025)" \
+              --title "Athena Global M6+ Research Bundle v4: Interaction Study v1.1 (1976–2025)" \
               --notes "$RELEASE_NOTES" \
               --target "$GITHUB_SHA"
           fi

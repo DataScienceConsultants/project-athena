@@ -25,7 +25,7 @@ Athena uses the USGS FDSN event service as the operational source for the frozen
 
 **U.S. Geological Survey. _Magnitude Types_.**
 
-Athena uses the USGS magnitude-type definitions to decide whether a preferred catalog magnitude belongs to the Mw family. Only `Mw`, `Mww`, `Mwc`, `Mwb`, `Mwr`, and `Mwp` are eligible for Athena's scalar seismic-moment conversion in Earthquake Interaction Study v1. Other magnitude types remain unconverted rather than being silently treated as moment magnitude.
+Athena uses the USGS magnitude-type definitions to decide whether a preferred catalog magnitude belongs to the Mw family. Only `Mw`, `Mww`, `Mwc`, `Mwb`, `Mwr`, and `Mwp` are eligible for Athena's scalar seismic-moment conversion in the Earthquake Interaction Study. Other magnitude types remain unconverted rather than being silently treated as moment magnitude.
 
 ## Active-fault context
 
@@ -63,9 +63,9 @@ PB2002 plate-boundary proximity and plate-pair membership are retrospective tect
 
 Athena records ISC-GEM as an independent homogeneous large-event reference and completeness cross-check. It is not used as an unqualified replacement for the operational ComCat cohort.
 
-## Earthquake Interaction Study v1
+## Earthquake Interaction Study v1.1
 
-Earthquake Interaction Study v1 is a **retrospective descriptive association study** over the frozen global M6.0+ cohort. For every qualifying source event, Athena measures M6.0+ activity before and after the source event using paired 1-, 7-, 30-, 90-, and 365-day windows and cumulative 100-, 250-, 500-, 1,000-, and 2,000-km epicentral distance windows.
+Earthquake Interaction Study v1.1 is a **retrospective descriptive association study** over the frozen global M6.0+ cohort. For every qualifying source event, Athena measures M6.0+ activity before and after the source event using paired 1-, 7-, 30-, 90-, and 365-day windows and cumulative 100-, 250-, 500-, 1,000-, and 2,000-km epicentral distance windows.
 
 For each source/window combination, Athena records:
 
@@ -75,7 +75,33 @@ For each source/window combination, Athena records:
 - whether the pre and post windows are complete within the frozen catalog bounds;
 - source magnitude type and scalar seismic moment when the preferred magnitude is an Mw-family magnitude.
 
-V1 deliberately reports descriptive pre/post counts and ratios without p-values. Observation windows overlap, so treating each source event as statistically independent would be unjustified. A later inferential version must introduce and validate a dependence-aware null model before Athena reports statistical significance.
+V1.1 deliberately reports descriptive pre/post counts and ratios without p-values. Observation windows overlap, so treating each source event as statistically independent would be unjustified. A later inferential version must introduce and validate a dependence-aware null model before Athena reports statistical significance.
+
+### V1.1 correction: pair symmetry and source-size strata
+
+The first v1 durable bundle demonstrated an important accounting property: if the same M6.0+ catalog is used as both the source population and the target population, an earthquake pair can appear once as a post-event for the earlier source and once as a pre-event for the later source. Summing across the entire identical source/target cohort therefore drives the global aggregate toward pre/post symmetry, apart from catalog-edge eligibility differences.
+
+V1.1 keeps the all-source aggregate for transparency, but marks it as unsuitable for directional interpretation. Directional descriptive analysis is instead reported for larger source-event strata:
+
+- M7.0+ sources;
+- M7.5+ sources;
+- M8.0+ sources.
+
+The target population remains the frozen M6.0+ cohort. This breaks the simple pair-count symmetry and lets Athena ask whether progressively larger source earthquakes are followed by different M6.0+ activity patterns than occurred before those larger sources. These strata are still descriptive and overlapping; they do not establish causation or statistical significance.
+
+### V1.1 correction: non-overlapping distance annuli
+
+The original distance windows are cumulative. For example, the 2,000-km count also includes every event within 100, 250, 500, and 1,000 km. A large apparent 2,000-km signal can therefore be produced entirely by near-source events.
+
+V1.1 additionally reports non-overlapping distance annuli by subtracting adjacent cumulative windows:
+
+- 0–100 km;
+- 100–250 km;
+- 250–500 km;
+- 500–1,000 km;
+- 1,000–2,000 km.
+
+These annuli are intended to distinguish near-source clustering from broader spatial association. They remain epicentral great-circle distance bands, not rupture-to-rupture or along-plate-boundary distances.
 
 ### Implemented scalar seismic-moment relation
 
@@ -95,13 +121,13 @@ Athena labels this quantity **scalar seismic moment**, not transferred energy. N
 
 **Dieterich, J. (1994). _A constitutive law for rate of earthquake production and its application to earthquake clustering_. Journal of Geophysical Research, 99(B2), 2601-2618. https://doi.org/10.1029/93JB02581**
 
-Dieterich provides physical context for why earthquake rates may change after stress perturbations and for temporal clustering. Earthquake Interaction Study v1 does **not** implement a Dieterich rate-and-state inversion or infer stressing history.
+Dieterich provides physical context for why earthquake rates may change after stress perturbations and for temporal clustering. Earthquake Interaction Study v1.1 does **not** implement a Dieterich rate-and-state inversion or infer stressing history.
 
 ### Physical context: static Coulomb stress triggering
 
 **King, G. C. P., Stein, R. S., & Lin, J. (1994). _Static stress changes and the triggering of earthquakes_. Bulletin of the Seismological Society of America, 84(3), 935-953. https://doi.org/10.1785/BSSA0840030935**
 
-King, Stein, and Lin provide the physical basis for later Coulomb-stress research. V1 does **not** calculate Coulomb stress because the frozen catalog/plate-context layer does not yet provide the rupture geometry, slip model, receiver-fault orientation, and frictional assumptions required for such a calculation.
+King, Stein, and Lin provide the physical basis for later Coulomb-stress research. V1.1 does **not** calculate Coulomb stress because the frozen catalog/plate-context layer does not yet provide the rupture geometry, slip model, receiver-fault orientation, and frictional assumptions required for such a calculation.
 
 ### Physical context and caution: dynamic triggering
 
@@ -109,12 +135,13 @@ King, Stein, and Lin provide the physical basis for later Coulomb-stress researc
 
 Brodsky and Prejean document remotely triggered seismicity and show why cumulative shaking energy density alone is not a sufficient explanation for the observed triggering at Long Valley. Athena therefore does not interpret a large source magnitude, scalar seismic moment, or subsequent catalog association as proof that earthquake energy caused a later event.
 
-## V1 limitations that must remain visible
+## V1.1 limitations that must remain visible
 
 - The cohort contains M6.0+ events only and cannot describe ordinary lower-magnitude aftershock populations.
 - Spatial separation is epicentral great-circle distance, not rupture-to-rupture distance or along-boundary path length.
 - PB2002 relationships are nearest mapped tectonic context and are not causal attribution.
-- V1 does not calculate static Coulomb stress, dynamic wave stress, rupture propagation, slip transfer, or receiver-fault loading.
-- Overlapping windows create dependence; v1 therefore does not report p-values or claim statistical significance.
+- V1.1 does not calculate static Coulomb stress, dynamic wave stress, rupture propagation, slip transfer, or receiver-fault loading.
+- Overlapping windows create dependence; v1.1 therefore does not report p-values or claim statistical significance.
+- The all-M6+ aggregate is pair-symmetric by construction and is retained only as a transparent baseline; directional interpretation uses the larger-source strata.
 - Scalar seismic moment is a source-size variable and is not labeled transferred energy.
 - The study is retrospective, descriptive, and nonpredictive.
