@@ -21,6 +21,7 @@ from src.global_research.faults import (
 )
 from src.global_research.interaction import (
     DEFAULT_DISTANCE_WINDOWS_KM,
+    DEFAULT_SOURCE_MAGNITUDE_THRESHOLDS,
     DEFAULT_TIME_WINDOWS_DAYS,
     INTERACTION_STUDY_ID,
     MOMENT_MAGNITUDE_TYPES,
@@ -84,6 +85,7 @@ __all__ = [
     "CatalogPlanningError",
     "DEFAULT_DISTANCE_WINDOWS_KM",
     "DEFAULT_FAULT_SOURCE",
+    "DEFAULT_SOURCE_MAGNITUDE_THRESHOLDS",
     "DEFAULT_TIME_WINDOWS_DAYS",
     "FaultAssociation",
     "FaultGridIndex",
