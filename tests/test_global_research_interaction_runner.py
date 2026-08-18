@@ -70,15 +70,24 @@ def test_runner_persists_cited_interaction_study_artifacts(tmp_path):
         interaction_max_distance_km=500.0,
         interaction_time_windows_days=(1.0, 7.0),
         interaction_distance_windows_km=(100.0, 500.0),
+        interaction_source_magnitude_thresholds=(7.0, 7.5, 8.0),
         counter=lambda query: 3,
         downloader=FakeDownloader(),
         generated_at=datetime(2026, 8, 17, 12, 0, tzinfo=UTC),
     )
 
-    assert result.metadata["bundle_schema_version"] == 3
+    assert result.metadata["bundle_schema_version"] == 4
     assert result.metadata["interaction_study_included"] is True
+    assert result.metadata["interaction_analysis_schema_version"] == 2
     assert result.metadata["interaction_pair_count"] == 3
     assert result.metadata["interaction_window_observation_count"] == 12
+    assert result.metadata["interaction_source_magnitude_thresholds"] == [
+        7.0,
+        7.5,
+        8.0,
+    ]
+    assert result.metadata["interaction_source_magnitude_statistic_count"] == 4
+    assert result.metadata["interaction_annular_statistic_count"] == 4
     assert result.metadata["interaction_inference_status"] == (
         "descriptive_only_no_independence_assumption"
     )
@@ -94,10 +103,15 @@ def test_runner_persists_cited_interaction_study_artifacts(tmp_path):
     summary = json.loads(
         (output / "interaction_summary.json").read_text(encoding="utf-8")
     )
-    assert summary["study_id"] == "global-m6-1976-2025-interaction-v1"
+    assert summary["schema_version"] == 2
+    assert summary["study_id"] == "global-m6-1976-2025-interaction-v1-1"
     assert summary["report_is_nonpredictive"] is True
     assert summary["pair_count"] == 3
-    assert len(summary["limitations"]) >= 5
+    assert "symmetric" in summary["aggregate_interpretation_warning"]
+    assert summary["source_magnitude_thresholds"] == [7.0, 7.5, 8.0]
+    assert len(summary["source_magnitude_statistics"]) == 4
+    assert len(summary["annular_statistics"]) == 4
+    assert len(summary["limitations"]) >= 6
     citation_keys = {item["source_key"] for item in summary["source_citations"]}
     assert citation_keys == {
         "usgs_magnitude_types",
