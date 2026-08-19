@@ -1,0 +1,317 @@
+name: Global Research Bundle v5 - Along Boundary
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-global-research-bundle-v5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Project Athena with research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install '.[dev]'
+
+      - name: Build frozen 50-year bundle with along-boundary study
+        run: |
+          python -m src.global_research \
+            --with-gem-faults \
+            --with-pb2002-boundaries \
+            --with-interaction-study \
+            --with-along-boundary-study \
+            --output outputs/global-m6-1976-2025
+
+      - name: Validate generated v5 bundle
+        run: |
+          python - <<'PY'
+          import csv
+          import json
+          from pathlib import Path
+
+          bundle = Path("outputs/global-m6-1976-2025")
+          required = [
+              "metadata.json",
+              "catalog.csv",
+              "catalog_plan.json",
+              "fault_associations.csv",
+              "faults.geojson",
+              "event_plate_context.csv",
+              "plate_boundaries.geojson",
+              "interaction_pairs.csv",
+              "interaction_windows.csv",
+              "interaction_summary.json",
+              "along_boundary_pairs.csv",
+              "along_boundary_windows.csv",
+              "along_boundary_summary.json",
+          ]
+          for name in required:
+              path = bundle / name
+              if not path.is_file():
+                  raise SystemExit(f"Missing required v5 artifact: {path}")
+
+          metadata = json.loads((bundle / "metadata.json").read_text(encoding="utf-8"))
+          expected = {
+              "bundle_schema_version": 5,
+              "profile_id": "global-m6-1976-2025",
+              "start_utc": "1976-01-01T00:00:00Z",
+              "end_utc": "2026-01-01T00:00:00Z",
+              "minimum_magnitude": 6.0,
+              "research_mode": "retrospective_global",
+              "report_is_nonpredictive": True,
+              "plate_boundary_context_included": True,
+              "plate_boundary_step_count": 5819,
+              "interaction_study_included": True,
+              "interaction_study_id": "global-m6-1976-2025-interaction-v1-1",
+              "along_boundary_study_included": True,
+              "along_boundary_study_id": "global-m6-1976-2025-along-boundary-v1",
+              "along_boundary_analysis_schema_version": 1,
+              "along_boundary_routing_scope": "same_plate_pair",
+              "along_boundary_inference_status": (
+                  "descriptive_only_null_model_not_yet_applied"
+              ),
+              "along_boundary_source_magnitude_statistic_count": 75,
+              "along_boundary_annular_statistic_count": 75,
+              "along_boundary_graph_edge_count": 5819,
+          }
+          for key, value in expected.items():
+              if metadata.get(key) != value:
+                  raise SystemExit(
+                      f"Unexpected metadata {key}: {metadata.get(key)!r}; expected {value!r}"
+                  )
+
+          if metadata.get("along_boundary_time_windows_days") != [
+              1.0, 7.0, 30.0, 90.0, 365.0
+          ]:
+              raise SystemExit("Unexpected along-boundary time windows")
+          if metadata.get("along_boundary_distance_windows_km") != [
+              100.0, 250.0, 500.0, 1000.0, 2000.0
+          ]:
+              raise SystemExit("Unexpected along-boundary distance windows")
+          if metadata.get("along_boundary_source_magnitude_thresholds") != [
+              7.0, 7.5, 8.0
+          ]:
+              raise SystemExit("Unexpected along-boundary source thresholds")
+          if metadata.get("along_boundary_max_distance_km") != 2000.0:
+              raise SystemExit("Unexpected maximum along-boundary distance")
+          if metadata.get("along_boundary_candidate_radial_envelope_km") != 3000.0:
+              raise SystemExit("Unexpected along-boundary radial candidate envelope")
+          semantics = metadata.get("along_boundary_semantics", "")
+          for forbidden_claim in (
+              "no causal triggering",
+              "stress transfer",
+              "energy transfer",
+              "future-earthquake probability",
+          ):
+              if forbidden_claim not in semantics:
+                  raise SystemExit(
+                      f"Along-boundary semantics lost safeguard: {forbidden_claim}"
+                  )
+
+          with (bundle / "along_boundary_pairs.csv").open(
+              "r", encoding="utf-8", newline=""
+          ) as source:
+              pair_rows = list(csv.DictReader(source))
+          if not pair_rows:
+              raise SystemExit("Along-boundary pair artifact is empty")
+          if len(pair_rows) != metadata.get("along_boundary_pair_count"):
+              raise SystemExit("Along-boundary pair count does not match metadata")
+
+          route_available = [
+              row for row in pair_rows if row.get("route_status") == "available"
+          ]
+          if not route_available:
+              raise SystemExit("No same-plate-pair mapped routes were produced")
+          if len(route_available) != metadata.get(
+              "along_boundary_route_available_pair_count"
+          ):
+              raise SystemExit("Route-available pair count does not match metadata")
+          if any(not row.get("along_boundary_distance_km") for row in route_available):
+              raise SystemExit("A route-available pair is missing mapped distance")
+
+          with (bundle / "along_boundary_windows.csv").open(
+              "r", encoding="utf-8", newline=""
+          ) as source:
+              window_count = sum(1 for _ in csv.DictReader(source))
+          if window_count <= 0:
+              raise SystemExit("Along-boundary window artifact is empty")
+          if window_count != metadata.get("along_boundary_window_observation_count"):
+              raise SystemExit("Along-boundary window count does not match metadata")
+
+          summary = json.loads(
+              (bundle / "along_boundary_summary.json").read_text(encoding="utf-8")
+          )
+          summary_expected = {
+              "schema_version": 1,
+              "study_id": "global-m6-1976-2025-along-boundary-v1",
+              "profile_id": "global-m6-1976-2025",
+              "catalog_minimum_magnitude": 6.0,
+              "research_mode": "retrospective_descriptive",
+              "routing_scope": "same_plate_pair",
+              "inference_status": "descriptive_only_null_model_not_yet_applied",
+              "report_is_nonpredictive": True,
+              "source_magnitude_statistic_count": 75,
+              "annular_statistic_count": 75,
+              "pb2002_graph_edge_count": 5819,
+          }
+          for key, value in summary_expected.items():
+              if summary.get(key) != value:
+                  raise SystemExit(
+                      f"Unexpected along-boundary summary {key}: "
+                      f"{summary.get(key)!r}; expected {value!r}"
+                  )
+          if summary.get("source_magnitude_thresholds") != [7.0, 7.5, 8.0]:
+              raise SystemExit("Along-boundary summary lost source thresholds")
+          if len(summary.get("limitations", [])) < 8:
+              raise SystemExit("Along-boundary summary is missing limitations")
+
+          stratified = summary.get("source_magnitude_statistics")
+          annular = summary.get("annular_statistics")
+          if not isinstance(stratified, list) or len(stratified) != 75:
+              raise SystemExit("Expected 75 along-boundary source-magnitude cells")
+          if not isinstance(annular, list) or len(annular) != 75:
+              raise SystemExit("Expected 75 along-boundary annular cells")
+          for threshold in (7.0, 7.5, 8.0):
+              if sum(
+                  item.get("source_minimum_magnitude") == threshold
+                  for item in stratified
+              ) != 25:
+                  raise SystemExit(f"Unexpected M{threshold}+ cumulative cell count")
+              if sum(
+                  item.get("source_minimum_magnitude") == threshold
+                  for item in annular
+              ) != 25:
+                  raise SystemExit(f"Unexpected M{threshold}+ annular cell count")
+
+          coverage = summary.get("coverage") or {}
+          status_total = sum(
+              int(coverage.get(key, 0))
+              for key in (
+                  "route_available_pair_count",
+                  "missing_projection_pair_count",
+                  "different_plate_pair_count",
+                  "disconnected_same_plate_pair_count",
+              )
+          )
+          if status_total != coverage.get("candidate_pair_count"):
+              raise SystemExit("Along-boundary route coverage accounting does not close")
+
+          bird = (summary.get("source_citations") or [{}])[0]
+          if bird.get("source_key") != "bird_pb2002":
+              raise SystemExit("Along-boundary summary lost Bird PB2002 citation")
+          if (bird.get("citation") or {}).get("doi") != "10.1029/2001GC000252":
+              raise SystemExit("Along-boundary summary lost Bird DOI")
+          if bird.get("distribution_commit") != (
+              "339b0c56563c118307b1f4542703047f5f698fae"
+          ):
+              raise SystemExit("Along-boundary summary lost pinned PB2002 provenance")
+
+          print(json.dumps(metadata, indent=2, sort_keys=True))
+          PY
+
+      - name: Package durable v5 release asset
+        run: |
+          set -euo pipefail
+          cd outputs
+          zip -qr athena-global-m6-1976-2025.zip global-m6-1976-2025
+          sha256sum athena-global-m6-1976-2025.zip \
+            > athena-global-m6-1976-2025.zip.sha256
+
+      - name: Write v5 run summary
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+
+          bundle = Path("outputs/global-m6-1976-2025")
+          metadata = json.loads((bundle / "metadata.json").read_text(encoding="utf-8"))
+          study = json.loads(
+              (bundle / "along_boundary_summary.json").read_text(encoding="utf-8")
+          )
+          m8_1d_250 = next(
+              item
+              for item in study["source_magnitude_statistics"]
+              if item["source_minimum_magnitude"] == 8.0
+              and item["time_window_days"] == 1.0
+              and item["distance_window_km"] == 250.0
+          )
+
+          print("# Athena Global Research Bundle v5")
+          print()
+          print(f"- Profile: `{metadata['profile_id']}`")
+          print(f"- Catalog events: `{metadata['catalog_event_count']}`")
+          print(f"- PB2002 boundary steps: `{metadata['plate_boundary_step_count']}`")
+          print(f"- PB2002 graph nodes: `{study['pb2002_graph_node_count']}`")
+          print(f"- Candidate along-boundary pairs: `{study['pair_count']}`")
+          print(
+              f"- Route-available same-pair pairs: "
+              f"`{study['coverage']['route_available_pair_count']}`"
+          )
+          print(
+              "- M8+ / 1 day / 250 km along-boundary post:pre: "
+              f"`{m8_1d_250['post_to_pre_along_boundary_ratio']}`"
+          )
+          print(
+              "- M8+ / 1 day / 250 km routed-radial post:pre: "
+              f"`{m8_1d_250['post_to_pre_routed_radial_ratio']}`"
+          )
+          print("- Inference: `descriptive only; null model not yet applied`")
+          print("- Plate citation: `Bird (2003), DOI 10.1029/2001GC000252`")
+          print("- Scientific mode: retrospective, descriptive, nonpredictive")
+          print("- Durable release tag: `research-global-m6-1976-2025-v5`")
+          PY
+
+      - name: Upload temporary v5 workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: athena-global-m6-1976-2025-v5
+          path: outputs/global-m6-1976-2025/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish durable v5 GitHub release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: research-global-m6-1976-2025-v5
+        run: |
+          set -euo pipefail
+
+          RELEASE_NOTES=$(cat <<'EOF'
+          Project Athena global research bundle v5 for the complete 1976–2025 calendar-year window, magnitude 6.0 and above.
+
+          V5 retains the USGS ComCat catalog, verified GEM active-fault context, Bird PB2002 plate-boundary context, and Earthquake Interaction Study v1.1, and adds Along-Boundary Interaction Study v1.
+
+          The along-boundary study projects prepared events to their already-associated PB2002 digitization steps and compares shortest mapped same-plate-pair boundary-network distance with ordinary epicentral great-circle distance on the same route-available historical event pairs. Directional descriptive summaries use M7+, M7.5+, and M8+ source strata across the established time windows and distance annuli.
+
+          Bird (2003), DOI 10.1029/2001GC000252, remains the scientific source for PB2002 boundary geometry and adjacent plate identifiers. Athena retains its pinned PB2002 distribution provenance.
+
+          Scientific scope remains retrospective, descriptive, and nonpredictive. A shortest PB2002 graph route is not a rupture, stress-transfer, dynamic-triggering, energy-transfer, or causal path. V1 reports no p-values; a dependence-aware randomized/null model is a later inferential stage.
+          EOF
+          )
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" \
+              outputs/athena-global-m6-1976-2025.zip \
+              outputs/athena-global-m6-1976-2025.zip.sha256 \
+              --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              outputs/athena-global-m6-1976-2025.zip \
+              outputs/athena-global-m6-1976-2025.zip.sha256 \
+              --title "Athena Global M6+ Research Bundle v5: Along-Boundary Study v1" \
+              --notes "$RELEASE_NOTES" \
+              --target "$GITHUB_SHA"
+          fi

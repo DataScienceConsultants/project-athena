@@ -1,5 +1,18 @@
 """Public API for Athena's retrospective global seismic research layer."""
 
+from src.global_research.along_boundary_interaction import (
+    ALONG_BOUNDARY_STUDY_ID,
+    DEFAULT_ALONG_BOUNDARY_TIME_WINDOWS_DAYS,
+    DEFAULT_ALONG_BOUNDARY_WINDOWS_KM,
+    AlongBoundaryPair,
+    AlongBoundaryWindowObservation,
+    along_boundary_pair_to_record,
+    along_boundary_window_to_record,
+    build_along_boundary_pairs,
+    build_along_boundary_windows,
+    summarize_along_boundary_study,
+)
+from src.global_research.along_boundary_runner import run_along_boundary_study
 from src.global_research.catalog import (
     CatalogCountError,
     GlobalCatalogDownload,
@@ -87,9 +100,14 @@ from src.global_research.sources import (
 )
 
 __all__ = [
+    "ALONG_BOUNDARY_STUDY_ID",
     "AdaptiveGlobalCatalogPlanner",
+    "AlongBoundaryPair",
+    "AlongBoundaryWindowObservation",
     "CatalogCountError",
     "CatalogPlanningError",
+    "DEFAULT_ALONG_BOUNDARY_TIME_WINDOWS_DAYS",
+    "DEFAULT_ALONG_BOUNDARY_WINDOWS_KM",
     "DEFAULT_DISTANCE_WINDOWS_KM",
     "DEFAULT_FAULT_SOURCE",
     "DEFAULT_SOURCE_MAGNITUDE_THRESHOLDS",
@@ -119,9 +137,13 @@ __all__ = [
     "ROUTING_SCOPES",
     "ResearchSourceError",
     "USGSCatalogCounter",
+    "along_boundary_pair_to_record",
+    "along_boundary_window_to_record",
     "associate_catalog_events",
     "associate_catalog_events_indexed",
     "associate_catalog_events_with_plate_boundaries",
+    "build_along_boundary_pairs",
+    "build_along_boundary_windows",
     "build_interaction_pairs",
     "build_interaction_windows",
     "distance_to_fault_km",
@@ -147,9 +169,11 @@ __all__ = [
     "project_event_to_boundary_step",
     "reference_50_year_plan",
     "research_source_citation",
+    "run_along_boundary_study",
     "run_global_research",
     "run_reference_50_year_research",
     "seismic_moment_nm",
+    "summarize_along_boundary_study",
     "summarize_interaction_windows",
     "window_to_record",
 ]
