@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Project Athena global earthquake research explorer for the 1976–2025 M6+ catalog and along-boundary study.">
+  <title>Project Athena — Research Explorer</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell">
+  <header class="hero">
+    <div>
+      <span class="eyebrow">PROJECT ATHENA · RESEARCH EXPLORER</span>
+      <h1>Global Earthquake Research Dashboard</h1>
+      <p>Explore the frozen 1976–2025 M6+ catalog, major earthquake sequences, tectonic context, and radial vs. along-boundary research results.</p>
+    </div>
+    <div class="release"><i></i><div><strong id="releaseLabel">Loading v5 bundle…</strong><small id="generatedLabel">Preparing data</small></div></div>
+  </header>
+
+  <nav class="tabs" aria-label="Dashboard views">
+    <button class="tab active" data-view="explorer">Global Explorer</button>
+    <button class="tab" data-view="major">Major Events</button>
+    <button class="tab" data-view="study">Study Results</button>
+    <button class="tab" data-view="data">Data & Sources</button>
+  </nav>
+
+  <main>
+    <section class="view active" id="view-explorer">
+      <div class="metrics">
+        <article><span>Catalog</span><strong id="metricEvents">—</strong><small>M6+ records</small></article>
+        <article><span>Major</span><strong id="metricM7">—</strong><small>M7+ earthquakes</small></article>
+        <article><span>Very large</span><strong id="metricM8">—</strong><small>M8+ earthquakes</small></article>
+        <article><span>Giants</span><strong id="metricM9">—</strong><small>M9+ earthquakes</small></article>
+        <article><span>PB2002 context</span><strong id="metricPlateCoverage">—</strong><small>catalog coverage</small></article>
+        <article><span>Routed pairs</span><strong id="metricRoutes">—</strong><small>same plate pair</small></article>
+      </div>
+
+      <section class="panel filters">
+        <div class="panel-head"><div><span class="kicker">FILTERS</span><h2>Find earthquakes</h2></div><button class="ghost" id="resetFilters">Reset</button></div>
+        <div class="filter-grid">
+          <label>Minimum magnitude<select id="magnitudeFilter"><option value="6">M6+</option><option value="7">M7+</option><option value="7.5">M7.5+</option><option value="8">M8+</option><option value="9">M9+</option></select></label>
+          <label>From year<input id="yearFrom" type="number" min="1976" max="2025" value="1976"></label>
+          <label>To year<input id="yearTo" type="number" min="1976" max="2025" value="2025"></label>
+          <label>Boundary class<select id="boundaryClass"><option value="all">All classes</option></select></label>
+          <label>Record type<select id="eventType"><option value="earthquake">Earthquakes</option><option value="all">All records</option><option value="nuclear explosion">Nuclear explosions</option></select></label>
+          <label class="wide">Search<input id="searchFilter" type="search" placeholder="Tohoku, Chile, Kamchatka, event ID, fault…"></label>
+        </div>
+        <div class="quick"><button data-preset="m9">M9 giants</button><button data-preset="m8">M8+</button><button data-preset="recent">2015–2025</button><button data-search="Tohoku">Tohoku</button><button data-search="Sumatra">Sumatra</button><button data-search="Kamchatka">Kamchatka</button><button data-search="Chile">Chile</button></div>
+      </section>
+
+      <div class="explorer-grid">
+        <section class="panel map-panel">
+          <div class="panel-head compact"><div><span class="kicker">MAP</span><h2 id="mapTitle">Global M6+ catalog</h2></div><div class="map-controls"><label><input type="checkbox" id="toggleBoundaries"> PB2002 boundaries</label><label><input type="checkbox" id="toggleFaults"> GEM faults</label></div></div>
+          <div id="map"></div>
+          <div class="legend"><span><i class="m6"></i>M6</span><span><i class="m7"></i>M7</span><span><i class="m8"></i>M8</span><span><i class="m9"></i>M9</span><em>Circle size scales with magnitude</em></div>
+        </section>
+        <aside class="panel detail" id="eventPanel"><div class="empty"><b>◎</b><h3>Select an earthquake</h3><p>Click a map marker or table row to inspect the event, PB2002 plate context, nearest GEM fault, and major-event relationships.</p></div></aside>
+      </div>
+
+      <div class="two-col">
+        <section class="panel"><div class="panel-head compact"><div><span class="kicker">TIMELINE</span><h2>Events per year</h2></div><span class="pill" id="filteredCount">—</span></div><div class="chart"><canvas id="timelineChart"></canvas></div></section>
+        <section class="panel"><div class="panel-head compact"><div><span class="kicker">MAGNITUDE</span><h2>Magnitude distribution</h2></div></div><div class="chart"><canvas id="magnitudeChart"></canvas></div></section>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head compact"><div><span class="kicker">CATALOG</span><h2>Filtered earthquake records</h2></div><span class="muted">Click a row to inspect it</span></div>
+        <div class="table-scroll"><table><thead><tr><th>M</th><th>Date</th><th>Place</th><th>Depth</th><th>Boundary</th><th>Class</th><th>Nearest fault</th></tr></thead><tbody id="eventRows"></tbody></table></div>
+        <div class="table-footer"><span id="tableCaption">—</span><button class="ghost" id="showMoreEvents">Show more</button></div>
+      </section>
+    </section>
+
+    <section class="view" id="view-major">
+      <div class="section-intro"><span class="kicker">MAJOR EVENT DRILLDOWN</span><h2>Profile M7+ earthquakes and their routed M6+ relationships</h2><p>Select a major earthquake to compare historical activity before and after it across time and distance windows.</p></div>
+      <div class="major-layout">
+        <section class="panel major-list-panel">
+          <input id="majorSearch" type="search" placeholder="Search major events…">
+          <div class="segments" id="majorSegments"><button class="active" data-major-min="7">M7+</button><button data-major-min="7.5">M7.5+</button><button data-major-min="8">M8+</button><button data-major-min="9">M9+</button></div>
+          <div id="majorList" class="major-list"></div>
+        </section>
+        <div class="major-stack">
+          <section class="panel" id="majorHero"><div class="empty"><h3>Choose a major earthquake</h3><p>Its sequence metrics will appear here.</p></div></section>
+          <section class="panel"><div class="panel-head compact"><div><span class="kicker">PRE / POST</span><h2>Sequence counts by distance</h2></div><select id="majorTimeWindow"><option value="1">1 day</option><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="365">365 days</option></select></div><div class="chart tall"><canvas id="majorWindowChart"></canvas></div></section>
+          <section class="panel"><div class="panel-head compact"><div><span class="kicker">RELATIONSHIPS</span><h2>Routed M6+ events around the source</h2></div><span class="pill" id="relationCount">—</span></div><div class="chart"><canvas id="relationScatter"></canvas></div><div class="table-scroll short"><table><thead><tr><th>When</th><th>M</th><th>Place</th><th>Lag</th><th>Radial</th><th>Along boundary</th><th>Same boundary</th></tr></thead><tbody id="relationRows"></tbody></table></div></section>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-study">
+      <div class="section-intro"><span class="kicker">V5 STUDY RESULTS</span><h2>Radial vs. along-boundary behavior</h2><p>Post/pre ratios are descriptive comparisons. Values above 1 mean more M6+ events were counted after source earthquakes than in matched pre-event windows.</p></div>
+      <div class="metrics study-metrics"><article class="accent"><span>M8+ · 1 day · ≤250 km</span><strong id="studyM8Along">—</strong><small>along-boundary post/pre</small></article><article><span>Same routed pairs</span><strong id="studyM8Radial">—</strong><small>radial post/pre</small></article><article><span>75-cell similarity</span><strong id="studyCorrelation">—</strong><small>ratio correlation</small></article><article><span>Within 2,000 km</span><strong id="studyWithinLimit">—</strong><small>routed pairs</small></article></div>
+      <section class="panel"><div class="panel-head"><div><span class="kicker">DISTANCE RINGS</span><h2>Post/pre ratio by distance</h2></div><div class="inline"><label>Source<select id="studyMagnitude"><option value="7">M7+</option><option value="7.5">M7.5+</option><option value="8" selected>M8+</option></select></label><label>Window<select id="studyTime"><option value="1">1 day</option><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="365" selected>365 days</option></select></label></div></div><div class="chart tall"><canvas id="annularChart"></canvas></div></section>
+      <div class="two-col"><section class="panel"><div class="panel-head compact"><div><span class="kicker">TIME DECAY</span><h2>Ratio over time</h2></div><label>Within <select id="studyDistance"><option value="100">100 km</option><option value="250" selected>250 km</option><option value="500">500 km</option><option value="1000">1,000 km</option><option value="2000">2,000 km</option></select></label></div><div class="chart"><canvas id="timeDecayChart"></canvas></div></section><section class="panel"><div class="panel-head compact"><div><span class="kicker">75 CELLS</span><h2>Along vs. radial comparison</h2></div></div><div class="chart"><canvas id="cellScatter"></canvas></div></section></div>
+      <section class="panel interpretation"><span class="kicker">INTERPRETATION</span><h2>What v5 supports — and what it does not</h2><div class="interpret-grid"><div><strong>Strongest pattern</strong><p>Large source earthquakes are followed by a strong short-term concentration of nearby M6+ events.</p></div><div><strong>Distance behavior</strong><p>The descriptive excess weakens sharply with distance and approaches baseline at larger distances.</p></div><div><strong>Boundary metric</strong><p>PB2002 along-boundary distance mostly reorganizes the same nearby sequences rather than exposing a new distant population.</p></div><div><strong>Not established</strong><p>No causal triggering, stress transfer, energy transfer, rupture propagation, statistical significance, or future-earthquake probability is claimed.</p></div></div></section>
+    </section>
+
+    <section class="view" id="view-data">
+      <div class="section-intro"><span class="kicker">SOURCE OF TRUTH</span><h2>Raw data, provenance, and limitations</h2><p>The dashboard is generated from the immutable v5 release. Every original v5 research artifact remains downloadable here.</p></div>
+      <div class="two-col"><section class="panel"><span class="kicker">RAW FILES</span><h2>Download v5 artifacts</h2><div id="rawFiles" class="downloads"></div></section><section class="panel"><span class="kicker">CITATIONS</span><h2>Scientific sources</h2><div id="citations" class="citations"></div></section></div>
+      <section class="panel"><span class="kicker">LIMITATIONS</span><h2>Read before interpreting results</h2><ol id="limitations" class="limitations"></ol></section>
+      <section class="panel status-note"><h3>Research status</h3><p>This dashboard is retrospective, descriptive, and nonpredictive. It is not an earthquake forecast, warning, emergency alert, or evidence of a causal stress/energy-transfer path.</p></section>
+    </section>
+  </main>
+
+  <footer><span>Project Athena · Global M6+ Research Bundle v5</span><a href="https://github.com/DataScienceConsultants/project-athena" target="_blank" rel="noreferrer">Repository ↗</a><a href="https://github.com/DataScienceConsultants/project-athena/releases/tag/research-global-m6-1976-2025-v5" target="_blank" rel="noreferrer">v5 release ↗</a></footer>
+</div>
+<div id="loading" class="loading"><div class="spinner"></div><strong>Loading Athena research data…</strong><span id="loadingMessage">Reading the v5 catalog</span></div>
+<div id="toast" class="toast" hidden></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
