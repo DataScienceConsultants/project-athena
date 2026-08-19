@@ -1,0 +1,97 @@
+name: Athena Research Dashboard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/dashboard/**"
+      - "scripts/build_research_dashboard_data.py"
+      - ".github/workflows/research-dashboard-pages.yml"
+  pull_request:
+    paths:
+      - "docs/dashboard/**"
+      - "scripts/build_research_dashboard_data.py"
+      - "tests/test_research_dashboard_data.py"
+      - ".github/workflows/research-dashboard-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: athena-research-dashboard-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Download immutable v5 research release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: research-global-m6-1976-2025-v5
+        run: |
+          set -euo pipefail
+          mkdir -p .dashboard-bundle .dashboard-site/data
+          gh release download "$RELEASE_TAG" \
+            --pattern 'athena-global-m6-1976-2025.zip' \
+            --dir .dashboard-bundle
+          unzip -q .dashboard-bundle/athena-global-m6-1976-2025.zip \
+            -d .dashboard-bundle/extracted
+
+      - name: Build browser data indexes
+        run: |
+          set -euo pipefail
+          BUNDLE_DIR=$(find .dashboard-bundle/extracted -type f -name metadata.json -printf '%h\n' | head -n 1)
+          test -n "$BUNDLE_DIR"
+          python scripts/build_research_dashboard_data.py \
+            --bundle-dir "$BUNDLE_DIR" \
+            --output-dir .dashboard-site/data
+
+      - name: Assemble and validate dashboard
+        run: |
+          set -euo pipefail
+          cp docs/dashboard/index.html .dashboard-site/index.html
+          cp docs/dashboard/styles.css .dashboard-site/styles.css
+          cp docs/dashboard/app.js .dashboard-site/app.js
+          touch .dashboard-site/.nojekyll
+          node --check .dashboard-site/app.js
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('.dashboard-site')
+          manifest = json.loads((root / 'data' / 'manifest.json').read_text())
+          assert manifest['bundle_schema_version'] == 5
+          assert manifest['catalog_event_count'] == 7085
+          assert manifest['major_event_count'] > 0
+          assert (root / 'data' / 'raw' / 'along_boundary_pairs.csv').is_file()
+          assert (root / 'data' / 'raw' / 'faults.geojson').is_file()
+          print(json.dumps(manifest, indent=2, sort_keys=True))
+          PY
+
+      - name: Configure Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: .dashboard-site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
