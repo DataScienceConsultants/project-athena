@@ -57,6 +57,13 @@ from src.global_research.plate_boundaries import (
     parse_pb2002_steps,
     plate_boundary_feature_collection,
 )
+from src.global_research.plate_boundary_network import (
+    ROUTING_SCOPES,
+    PlateBoundaryGraph,
+    PlateBoundaryProjection,
+    project_catalog_events_to_boundaries,
+    project_event_to_boundary_step,
+)
 from src.global_research.planner import (
     AdaptiveGlobalCatalogPlanner,
     CatalogPlanningError,
@@ -104,9 +111,12 @@ __all__ = [
     "PB2002_SOURCE",
     "PlannedCatalogQuery",
     "PlateBoundaryAssociation",
+    "PlateBoundaryGraph",
     "PlateBoundaryGridIndex",
+    "PlateBoundaryProjection",
     "PlateBoundaryStep",
     "REFERENCE_50_YEAR_PROFILE",
+    "ROUTING_SCOPES",
     "ResearchSourceError",
     "USGSCatalogCounter",
     "associate_catalog_events",
@@ -133,6 +143,8 @@ __all__ = [
     "plate_pair_key",
     "planned_query_as_catalog_query",
     "plate_boundary_feature_collection",
+    "project_catalog_events_to_boundaries",
+    "project_event_to_boundary_step",
     "reference_50_year_plan",
     "research_source_citation",
     "run_global_research",
