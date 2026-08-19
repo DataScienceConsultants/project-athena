@@ -7,6 +7,7 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
+from src.global_research.along_boundary_runner import run_along_boundary_study
 from src.global_research.runner import run_reference_50_year_research
 from src.global_research.sources import (
     download_gem_global_active_faults,
@@ -68,8 +69,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--with-interaction-study",
         action="store_true",
         help=(
-            "Generate the retrospective Earthquake Interaction Study v1. "
+            "Generate the retrospective Earthquake Interaction Study v1.1. "
             "Requires PB2002 plate-boundary context."
+        ),
+    )
+    parser.add_argument(
+        "--with-along-boundary-study",
+        action="store_true",
+        help=(
+            "Generate the retrospective Along-Boundary Interaction Study v1 after "
+            "the base bundle. Requires PB2002 plate-boundary context."
         ),
     )
     return parser
@@ -84,6 +93,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     plate_path = args.plate_boundary_steps
     if args.with_pb2002_boundaries:
         plate_path = download_pb2002_steps()
+    if args.with_along_boundary_study and plate_path is None:
+        raise SystemExit(
+            "--with-along-boundary-study requires --plate-boundary-steps or "
+            "--with-pb2002-boundaries."
+        )
 
     bundle = run_reference_50_year_research(
         output_dir=args.output,
@@ -93,6 +107,18 @@ def main(argv: Sequence[str] | None = None) -> None:
         max_plate_boundary_distance_km=args.max_plate_boundary_distance_km,
         interaction_study=args.with_interaction_study,
     )
+    if args.with_along_boundary_study:
+        run_along_boundary_study(
+            bundle_dir=bundle.output_dir,
+            plate_boundary_steps_path=plate_path,
+            max_prepared_boundary_offset_km=args.max_plate_boundary_distance_km,
+        )
+        bundle = type(bundle)(
+            output_dir=bundle.output_dir,
+            metadata=json.loads(
+                (bundle.output_dir / "metadata.json").read_text(encoding="utf-8")
+            ),
+        )
     print(json.dumps(bundle.metadata, indent=2, allow_nan=False))
 
 
